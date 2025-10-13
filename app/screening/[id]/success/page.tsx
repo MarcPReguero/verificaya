@@ -143,15 +143,37 @@ export default function ScreeningSuccess({ params }: { params: Promise<{ id: str
           </div>
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-            <h3 className="font-semibold text-gray-900 mb-2">📧 Próximos pasos</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Hemos enviado un email de confirmación a tu bandeja de entrada con:
-            </p>
-            <ul className="text-sm text-gray-600 space-y-2 text-left">
-              <li>• ID de verificación: <span className="font-mono font-semibold">{screeningId.substring(0, 8)}</span></li>
-              <li>• Instrucciones para el inquilino</li>
-              <li>• Enlace para seguimiento en tiempo real</li>
-            </ul>
+            <h3 className="font-semibold text-gray-900 mb-2">
+              {isDemo ? '🎯 Demo Completado' : '📧 Próximos pasos'}
+            </h3>
+            {isDemo ? (
+              <>
+                <p className="text-sm text-gray-600 mb-4">
+                  Has explorado el flujo completo. En una verificación real:
+                </p>
+                <ul className="text-sm text-gray-600 space-y-2 text-left">
+                  <li>• Se procesaría el pago con Stripe (€49 o €99)</li>
+                  <li>• Se realizaría consulta ASNEF real</li>
+                  <li>• Se verificarían documentos con OCR</li>
+                  <li>• Se enviarían emails al inquilino y propietario</li>
+                  <li>• El informe PDF sería válido legalmente</li>
+                </ul>
+                <div className="mt-4 p-3 bg-green-100 border border-green-300 rounded text-sm text-green-800">
+                  <strong>💡 ¿Listo para empezar?</strong> Crea tu primera verificación real sin el modo demo
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 mb-4">
+                  Hemos enviado un email de confirmación a tu bandeja de entrada con:
+                </p>
+                <ul className="text-sm text-gray-600 space-y-2 text-left">
+                  <li>• ID de verificación: <span className="font-mono font-semibold">{screeningId.substring(0, 8)}</span></li>
+                  <li>• Instrucciones para el inquilino</li>
+                  <li>• Enlace para seguimiento en tiempo real</li>
+                </ul>
+              </>
+            )}
           </div>
 
           <div className="flex gap-4 justify-center">
@@ -162,10 +184,10 @@ export default function ScreeningSuccess({ params }: { params: Promise<{ id: str
               Ir al Dashboard
             </Link>
             <Link
-              href="/screening/new"
+              href={isDemo ? "/screening/new" : "/screening/new"}
               className="px-8 py-3 bg-white text-gray-700 border-2 border-gray-300 rounded-lg hover:bg-gray-50 transition font-semibold"
             >
-              Nueva Verificación
+              {isDemo ? 'Crear Verificación Real' : 'Nueva Verificación'}
             </Link>
           </div>
         </div>

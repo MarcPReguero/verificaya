@@ -6,9 +6,21 @@ import { es } from 'date-fns/locale';
 export class ReportService {
   static async generatePDFReport(
     screening: TenantScreening,
-    result: ScreeningResult
+    result: ScreeningResult,
+    isDemo: boolean = false
   ): Promise<Blob> {
     const doc = new jsPDF();
+    
+    // Demo Watermark (if applicable)
+    if (isDemo) {
+      doc.setFontSize(60);
+      doc.setTextColor(220, 220, 220);
+      doc.text('DEMO', 105, 150, { 
+        align: 'center',
+        angle: 45
+      });
+      doc.setTextColor(0, 0, 0);
+    }
     
     // Header
     doc.setFillColor(37, 99, 235); // Blue
@@ -16,21 +28,31 @@ export class ReportService {
     
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(24);
-    doc.text('TenantScreen', 20, 25);
+    doc.text('VerificaYa', 20, 25);
     
     doc.setFontSize(12);
-    doc.text('Informe de Verificación de Inquilino', 20, 33);
+    doc.text(isDemo ? 'Informe DEMO - No Válido para Uso Legal' : 'Informe de Verificación de Inquilino', 20, 33);
     
     // Reset text color
     doc.setTextColor(0, 0, 0);
     
+    // Demo banner at top
+    if (isDemo) {
+      doc.setFillColor(34, 197, 94); // Green
+      doc.rect(10, 45, 190, 8, 'F');
+      doc.setFontSize(10);
+      doc.setTextColor(255, 255, 255);
+      doc.text('🎯 INFORME DEMO - Este informe es de prueba y NO es válido para uso legal', 105, 50, { align: 'center' });
+      doc.setTextColor(0, 0, 0);
+    }
+    
     // Date and ID
     doc.setFontSize(10);
-    doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy', { locale: es })}`, 150, 50);
-    doc.text(`ID: ${screening.id.substring(0, 8)}`, 150, 56);
+    doc.text(`Fecha: ${format(new Date(), 'dd/MM/yyyy', { locale: es })}`, 150, isDemo ? 62 : 50);
+    doc.text(`ID: ${screening.id.substring(0, 8)}${isDemo ? '-DEMO' : ''}`, 150, isDemo ? 68 : 56);
     
     // Score Box
-    let yPos = 70;
+    let yPos = isDemo ? 80 : 70;
     doc.setFontSize(16);
     doc.text('Puntuación General', 20, yPos);
     
@@ -47,7 +69,7 @@ export class ReportService {
     doc.setFontSize(10);
     
     // Tenant Information
-    yPos = 100;
+    yPos += 30;
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text('Datos del Inquilino', 20, yPos);

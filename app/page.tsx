@@ -124,6 +124,12 @@ export default function Home() {
               Iniciar Verificación
             </Link>
             <Link 
+              href="/screening/new?demo=true" 
+              className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition text-base sm:text-lg font-bold shadow-lg text-center"
+            >
+              🎯 Prueba Demo Gratis
+            </Link>
+            <Link 
               href="#casos-reales" 
               className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-white text-blue-700 rounded-xl border-2 border-blue-300 hover:bg-blue-50 transition text-base sm:text-lg font-semibold shadow text-center"
             >

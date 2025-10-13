@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         property_address: body.propertyAddress,
         monthly_rent: body.monthlyRent,
         package_type: body.packageType,
-        status: 'pending',
+        status: body.isDemo ? 'completed' : 'pending', // Auto-complete demo screenings
       })
       .select()
       .single();
