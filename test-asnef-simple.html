@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Test ASNEF Integration</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .test-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        .test-button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .test-button:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .result.success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .result.show {
+            display: block;
+        }
+        .result-data {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .score-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .score-excellent { background: #d4edda; color: #155724; }
+        .score-good { background: #d1ecf1; color: #0c5460; }
+        .score-medium { background: #fff3cd; color: #856404; }
+        .score-bad { background: #f8d7da; color: #721c24; }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-left: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 ASNEF Integration Test Suite</h1>
+        <p class="subtitle">Prueba la integración de ASNEF con diferentes perfiles de crédito</p>
+
+        <!-- Test 1: Perfil BUENO -->
+        <div class="test-section">
+            <div class="test-header">
+                <div class="test-title">
+                    📊 Test 1: Perfil BUENO (DNI: 12345678A)
+                    <span id="badge1"></span>
+                </div>
+                <button class="test-button" onclick="runTest1()">🚀 Ejecutar Test</button>
+            </div>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <!-- Test 2: Perfil REGULAR -->
+        <div class="test-section">
+            <div class="test-header">
+                <div class="test-title">
+                    📊 Test 2: Perfil REGULAR (DNI: 23456789B)
+                    <span id="badge2"></span>
+                </div>
+                <button class="test-button" onclick="runTest2()">🚀 Ejecutar Test</button>
+            </div>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <!-- Test 3: Perfil MALO -->
+        <div class="test-section">
+            <div class="test-header">
+                <div class="test-title">
+                    📊 Test 3: Perfil MALO (DNI: 34567890C)
+                    <span id="badge3"></span>
+                </div>
+                <button class="test-button" onclick="runTest3()">🚀 Ejecutar Test</button>
+            </div>
+            <div id="result3" class="result"></div>
+        </div>
+
+        <!-- Test 4: GET Endpoint -->
+        <div class="test-section">
+            <div class="test-header">
+                <div class="test-title">
+                    📊 Test 4: GET Endpoint (Quick Test)
+                    <span id="badge4"></span>
+                </div>
+                <button class="test-button" onclick="runTest4()">🚀 Ejecutar Test</button>
+            </div>
+            <div id="result4" class="result"></div>
+        </div>
+
+        <!-- Test All Button -->
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="test-button" style="font-size: 18px; padding: 15px 40px;" onclick="runAllTests()">
+                🎯 Ejecutar Todos los Tests
+            </button>
+        </div>
+    </div>
+
+    <script>
+        async function testCreditCheck(testNum, requestData, description) {
+            const resultDiv = document.getElementById(`result${testNum}`);
+            const badge = document.getElementById(`badge${testNum}`);
+            
+            resultDiv.innerHTML = `<div class="loader"></div> Consultando ASNEF...`;
+            resultDiv.className = 'result show';
+            badge.innerHTML = '';
+
+            try {
+                const response = await fetch('http://localhost:3001/api/credit-check', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const score = data.creditScore;
+                    let scoreClass = 'score-medium';
+                    let scoreText = 'Regular';
+                    
+                    if (score >= 800) {
+                        scoreClass = 'score-excellent';
+                        scoreText = 'Excelente';
+                    } else if (score >= 700) {
+                        scoreClass = 'score-good';
+                        scoreText = 'Muy Bueno';
+                    } else if (score >= 500) {
+                        scoreClass = 'score-medium';
+                        scoreText = 'Regular';
+                    } else {
+                        scoreClass = 'score-bad';
+                        scoreText = 'Malo';
+                    }
+
+                    badge.innerHTML = `<span class="score-badge ${scoreClass}">${score} - ${scoreText}</span>`;
+
+                    resultDiv.className = 'result success show';
+                    resultDiv.innerHTML = `
+                        <div style="font-size: 18px; font-weight: 600;">✅ ${description}</div>
+                        <div style="margin-top: 10px;">
+                            <strong>Score:</strong> ${score}/1000 (${scoreText})<br>
+                            <strong>Riesgo:</strong> ${data.riskLevel}<br>
+                            <strong>Deudas activas:</strong> ${data.hasActiveDebts ? 'Sí' : 'No'}<br>
+                            <strong>Monto total:</strong> €${data.totalDebt}<br>
+                            <strong>En ASNEF:</strong> ${data.isInAsnef ? 'Sí' : 'No'}<br>
+                            <strong>Modo Demo:</strong> ${data.demoMode ? 'Sí' : 'No'}<br>
+                            <strong>Recomendación:</strong> ${data.analysis.recommendation}
+                        </div>
+                        <div class="result-data">${JSON.stringify(data, null, 2)}</div>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error show';
+                resultDiv.innerHTML = `
+                    <div style="font-size: 18px; font-weight: 600;">❌ Error en ${description}</div>
+                    <div style="margin-top: 10px;">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+                badge.innerHTML = `<span class="score-badge score-bad">ERROR</span>`;
+            }
+        }
+
+        async function runTest1() {
+            await testCreditCheck(1, {
+                documentType: 'DNI',
+                documentNumber: '12345678A',
+                fullName: 'Ana García López'
+            }, 'Perfil BUENO - Sin deudas');
+        }
+
+        async function runTest2() {
+            await testCreditCheck(2, {
+                documentType: 'DNI',
+                documentNumber: '23456789B',
+                fullName: 'Carlos Martínez Ruiz'
+            }, 'Perfil REGULAR - Deudas menores');
+        }
+
+        async function runTest3() {
+            await testCreditCheck(3, {
+                documentType: 'DNI',
+                documentNumber: '34567890C',
+                fullName: 'Juan Pérez Gómez'
+            }, 'Perfil MALO - Alto riesgo');
+        }
+
+        async function runTest4() {
+            const resultDiv = document.getElementById('result4');
+            const badge = document.getElementById('badge4');
+            
+            resultDiv.innerHTML = `<div class="loader"></div> Consultando endpoint GET...`;
+            resultDiv.className = 'result show';
+            badge.innerHTML = '';
+
+            try {
+                const response = await fetch('http://localhost:3001/api/credit-check?document=12345678A');
+                const data = await response.json();
+
+                if (data.success) {
+                    badge.innerHTML = `<span class="score-badge score-excellent">${data.creditScore}</span>`;
+                    resultDiv.className = 'result success show';
+                    resultDiv.innerHTML = `
+                        <div style="font-size: 18px; font-weight: 600;">✅ GET Endpoint - Funcional</div>
+                        <div style="margin-top: 10px;">
+                            <strong>URL:</strong> /api/credit-check?document=12345678A<br>
+                            <strong>Score:</strong> ${data.creditScore}/1000<br>
+                            <strong>Método:</strong> GET (Quick Test)
+                        </div>
+                        <div class="result-data">${JSON.stringify(data, null, 2)}</div>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                resultDiv.className = 'result error show';
+                resultDiv.innerHTML = `
+                    <div style="font-size: 18px; font-weight: 600;">❌ Error en GET Endpoint</div>
+                    <div style="margin-top: 10px;">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+                badge.innerHTML = `<span class="score-badge score-bad">ERROR</span>`;
+            }
+        }
+
+        async function runAllTests() {
+            console.log('🧪 Ejecutando todos los tests...');
+            await runTest1();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest2();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest3();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await runTest4();
+            console.log('✅ Todos los tests completados');
+        }
+    </script>
+</body>
+</html>

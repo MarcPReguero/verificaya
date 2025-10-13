@@ -23,4 +23,54 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Better input contrast and visibility */
+input, select, textarea {
+  color: #111827 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af !important;
+  opacity: 1;
+}
+
+/* Ensure labels are always dark */
+label {
+  color: #111827 !important;
+}
+
+/* Focus states */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Blog content - force dark text for readability */
+.prose p, .prose li, .prose td, .prose th {
+  color: #111827 !important;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+  color: #111827 !important;
+}
+
+.prose strong, .prose b {
+  color: #111827 !important;
+  font-weight: 700;
+}
+
+.prose blockquote {
+  color: #1f2937 !important;
+  background-color: #eff6ff !important;
+}
+
+.prose code {
+  color: #111827 !important;
+}
+
+.prose a {
+  color: #2563eb !important;
 }
