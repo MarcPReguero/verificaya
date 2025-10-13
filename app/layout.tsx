@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import WhatsAppButton from "@/components/WhatsAppButton";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,11 +28,6 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <WhatsAppButton 
-          phoneNumber="34612345678"
-          message="Hola! Tengo una consulta sobre VerificaYa"
-          position="bottom-right"
-        />
       </body>
     </html>
   );
