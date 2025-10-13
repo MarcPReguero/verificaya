@@ -1,6 +1,10 @@
 import Stripe from 'stripe';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
+// Use environment variable or fallback to a placeholder for build purposes
+// NOTE: Payments will NOT work with the placeholder key - add real key in production
+const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_51placeholder_for_build_only';
+
+export const stripe = new Stripe(stripeKey, {
   apiVersion: '2025-09-30.clover',
 });
 
