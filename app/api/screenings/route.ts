@@ -92,11 +92,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create screening
+    // Create screening with new fields
     const { data: screening, error: screeningError } = await supabase
       .from('screenings')
       .insert({
         landlord_id: landlord.id,
+        landlord_email: body.landlordEmail, // Add for easier querying
         tenant_name: body.tenantName,
         tenant_email: body.tenantEmail,
         tenant_phone: body.tenantPhone,
@@ -104,10 +105,25 @@ export async function POST(request: NextRequest) {
         document_number: body.documentNumber,
         monthly_income: body.monthlyIncome,
         employment_status: body.employmentStatus,
+
+        // NEW: Employment stability fields
+        employment_years: body.employmentYears || null,
+        contract_type: body.contractType || null,
+        employer_name: body.employerName || null,
+
+        // NEW: References (JSONB array)
+        references: body.references || null,
+
+        // NEW: Rental history
+        previous_address: body.previousAddress || null,
+        previous_landlord_name: body.previousLandlordName || null,
+        previous_landlord_phone: body.previousLandlordPhone || null,
+
         property_address: body.propertyAddress,
         monthly_rent: body.monthlyRent,
         package_type: body.packageType,
         status: body.isDemo ? 'completed' : 'pending', // Auto-complete demo screenings
+        is_demo: body.isDemo || false,
       })
       .select()
       .single();
@@ -143,7 +159,7 @@ export async function POST(request: NextRequest) {
       creditCheckResult = undefined;
     }
 
-    // Calculate score with ASNEF data
+    // Calculate score with ASNEF data and new fields
     const scoringResult = ScreeningService.calculateScore(
       {
         id: screening.id,
@@ -152,16 +168,36 @@ export async function POST(request: NextRequest) {
         employmentStatus: body.employmentStatus,
         documentType: body.documentType,
         documentNumber: body.documentNumber,
+
+        // NEW: Employment stability
+        employmentYears: body.employmentYears,
+        contractType: body.contractType,
+        employerName: body.employerName,
+
+        // NEW: References
+        references: body.references,
+
+        // NEW: Rental history
+        previousAddress: body.previousAddress,
+        previousLandlordName: body.previousLandlordName,
+        previousLandlordPhone: body.previousLandlordPhone,
       },
       creditCheckResult // 🆕 Pass ASNEF result
     );
 
-    // Update screening with score and credit info
+    // Update screening with score, credit info, and new algorithm results
     const { error: updateError } = await supabase
       .from('screenings')
       .update({
         score: scoringResult.score,
         status: 'completed',
+        completed_at: new Date().toISOString(),
+
+        // NEW: Advanced scoring results
+        risk_level: scoringResult.riskLevel,
+        fraud_flags: scoringResult.fraudFlags,
+        explanation: scoringResult.explanation,
+
         // Store ASNEF data for future reference
         ...(creditCheckResult && {
           credit_score: creditCheckResult.creditScore,
