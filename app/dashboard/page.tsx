@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -13,6 +13,17 @@ const mockScreenings = [
     propertyAddress: 'Calle Gran Vía, 123, Barcelona',
     status: 'completed',
     score: 85,
+    riskLevel: 'low',
+    fraudFlags: [],
+    explanation: {
+      topPositiveFactors: [
+        { factor: 'Relación ingresos/alquiler', points: 25, description: 'Ingresos son 3.5x del alquiler mensual' },
+        { factor: 'Historial crediticio', points: 30, description: 'Score crediticio excelente (850/1000)' },
+        { factor: 'Estabilidad laboral', points: 8, description: '5 años en el empleo actual' },
+      ],
+      topNegativeFactors: [],
+      improvementSuggestions: [],
+    },
     createdAt: new Date('2025-10-10'),
     completedAt: new Date('2025-10-11'),
     isDemo: false,
@@ -29,8 +40,30 @@ const mockScreenings = [
     id: '3',
     tenantName: 'Carlos Martínez',
     propertyAddress: 'Carrer de Balmes, 200, Barcelona',
-    status: 'pending',
+    status: 'completed',
+    score: 58,
+    riskLevel: 'high',
+    fraudFlags: [
+      { type: 'suspicious_ratio', severity: 'high', description: 'Alquiler supera el 50% de los ingresos' },
+      { type: 'data_inconsistency', severity: 'high', description: 'Inclusión reciente en ASNEF (2 meses)' },
+    ],
+    explanation: {
+      topPositiveFactors: [
+        { factor: 'Verificación de identidad', points: 10, description: 'Documento DNI validado correctamente' },
+      ],
+      topNegativeFactors: [
+        { factor: 'Relación ingresos/alquiler', points: -20, description: 'El alquiler representa más del 50% de los ingresos' },
+        { factor: 'Historial crediticio ASNEF', points: -8, description: 'Deuda activa: €1,200 registrada hace 2 meses' },
+        { factor: 'Referencias', points: -10, description: 'No se proporcionaron referencias' },
+      ],
+      improvementSuggestions: [
+        'Buscar una propiedad con alquiler más bajo',
+        'Resolver deudas pendientes en ASNEF',
+        'Proporcionar al menos 2 referencias verificables',
+      ],
+    },
     createdAt: new Date('2025-10-12'),
+    completedAt: new Date('2025-10-12'),
     isDemo: false,
   },
   {
@@ -39,6 +72,17 @@ const mockScreenings = [
     propertyAddress: 'Rambla de Catalunya, 50, Barcelona',
     status: 'completed',
     score: 92,
+    riskLevel: 'low',
+    fraudFlags: [],
+    explanation: {
+      topPositiveFactors: [
+        { factor: 'Relación ingresos/alquiler', points: 25, description: 'Ingresos son 4x del alquiler mensual' },
+        { factor: 'Historial crediticio', points: 30, description: 'Score crediticio excelente (920/1000)' },
+        { factor: 'Tipo de contrato', points: 5, description: 'Contrato indefinido - máxima seguridad laboral' },
+      ],
+      topNegativeFactors: [],
+      improvementSuggestions: [],
+    },
     createdAt: new Date('2025-10-12'),
     completedAt: new Date('2025-10-12'),
     isDemo: true,
@@ -48,6 +92,7 @@ const mockScreenings = [
 export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
+  const [expandedScreening, setExpandedScreening] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -145,6 +190,9 @@ export default function Dashboard() {
                     Puntuación
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Riesgo
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
                     Fecha
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-900 uppercase tracking-wider">
@@ -154,47 +202,84 @@ export default function Dashboard() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {mockScreenings.map((screening) => (
-                  <tr key={screening.id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-2">
-                        <div className="text-sm font-semibold text-gray-900">{screening.tenantName}</div>
-                        {screening.isDemo && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded">
-                            DEMO
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-700">{screening.propertyAddress}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={screening.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {screening.score ? (
-                        <div className="text-sm font-bold text-gray-900">
-                          {screening.score}/100
+                  <>
+                    <tr
+                      key={screening.id}
+                      className="hover:bg-gray-50 transition cursor-pointer"
+                      onClick={() => setExpandedScreening(expandedScreening === screening.id ? null : screening.id)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="text-sm font-semibold text-gray-900">{screening.tenantName}</div>
+                          {screening.isDemo && (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded">
+                              DEMO
+                            </span>
+                          )}
+                          {screening.fraudFlags && screening.fraudFlags.length > 0 && (
+                            <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1">
+                              ⚠ {screening.fraudFlags.length}
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        <span className="text-gray-500">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                      {screening.createdAt.toLocaleDateString('es-ES')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {screening.status === 'completed' ? (
-                        <button className="text-blue-600 hover:text-blue-800 font-semibold hover:underline">
-                          Ver Informe
-                        </button>
-                      ) : (
-                        <button className="text-gray-500 cursor-not-allowed">
-                          En proceso
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-700">{screening.propertyAddress}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={screening.status} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {screening.score !== undefined ? (
+                          <div className="flex items-center gap-2">
+                            <div className={`text-sm font-bold ${
+                              screening.score >= 80 ? 'text-green-600' :
+                              screening.score >= 60 ? 'text-yellow-600' :
+                              'text-red-600'
+                            }`}>
+                              {screening.score}/100
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {screening.riskLevel && (
+                          <RiskLevelBadge level={screening.riskLevel} />
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {screening.createdAt.toLocaleDateString('es-ES')}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {screening.status === 'completed' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              // Handle PDF download
+                            }}
+                            className="text-blue-600 hover:text-blue-800 font-semibold hover:underline"
+                          >
+                            Ver Informe
+                          </button>
+                        ) : (
+                          <button className="text-gray-500 cursor-not-allowed">
+                            En proceso
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+
+                    {/* Expanded Details */}
+                    {expandedScreening === screening.id && screening.status === 'completed' && (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-6 bg-gray-50">
+                          <ScreeningDetails screening={screening} />
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 ))}
               </tbody>
             </table>
@@ -260,5 +345,146 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${styles[status as keyof typeof styles]}`}>
       {labels[status as keyof typeof labels]}
     </span>
+  );
+}
+
+function RiskLevelBadge({ level }: { level: string }) {
+  const styles = {
+    low: 'bg-green-100 text-green-800 border-green-300',
+    medium: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    high: 'bg-orange-100 text-orange-800 border-orange-300',
+    very_high: 'bg-red-100 text-red-800 border-red-300',
+  };
+
+  const labels = {
+    low: 'Bajo',
+    medium: 'Medio',
+    high: 'Alto',
+    very_high: 'Muy Alto',
+  };
+
+  const icons = {
+    low: '✓',
+    medium: '⚠',
+    high: '⚠',
+    very_high: '✗',
+  };
+
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-bold border ${styles[level as keyof typeof styles]}`}>
+      {icons[level as keyof typeof icons]} {labels[level as keyof typeof labels]}
+    </span>
+  );
+}
+
+function ScreeningDetails({ screening }: { screening: any }) {
+  return (
+    <div className="space-y-6">
+      {/* Fraud Flags */}
+      {screening.fraudFlags && screening.fraudFlags.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-lg p-5">
+          <div className="flex items-start gap-3 mb-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h3 className="font-bold text-red-900 text-lg">Alertas de Fraude Detectadas</h3>
+              <p className="text-sm text-red-700">Se requiere revisión manual antes de aprobar</p>
+            </div>
+          </div>
+          <ul className="space-y-2">
+            {screening.fraudFlags.map((flag: any, idx: number) => (
+              <li key={idx} className="flex items-start gap-2 text-sm">
+                <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                  flag.severity === 'high' ? 'bg-red-200 text-red-900' :
+                  flag.severity === 'medium' ? 'bg-orange-200 text-orange-900' :
+                  'bg-yellow-200 text-yellow-900'
+                }`}>
+                  {flag.severity.toUpperCase()}
+                </span>
+                <span className="text-red-800">{flag.description}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Explanation Section */}
+      {screening.explanation && (
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Positive Factors */}
+          <div className="bg-green-50 border-2 border-green-200 rounded-lg p-5">
+            <h3 className="font-bold text-green-900 text-lg mb-4 flex items-center gap-2">
+              <span className="text-2xl">✓</span>
+              Factores Positivos
+            </h3>
+            {screening.explanation.topPositiveFactors.length > 0 ? (
+              <ul className="space-y-3">
+                {screening.explanation.topPositiveFactors.map((factor: any, idx: number) => (
+                  <li key={idx} className="border-l-4 border-green-500 pl-3">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-semibold text-green-900 text-sm">{factor.factor}</span>
+                      <span className="text-green-700 font-bold text-sm">+{factor.points} pts</span>
+                    </div>
+                    <p className="text-xs text-green-700">{factor.description}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-green-700">No hay factores positivos destacados</p>
+            )}
+          </div>
+
+          {/* Negative Factors */}
+          <div className="bg-red-50 border-2 border-red-200 rounded-lg p-5">
+            <h3 className="font-bold text-red-900 text-lg mb-4 flex items-center gap-2">
+              <span className="text-2xl">✗</span>
+              Factores Negativos
+            </h3>
+            {screening.explanation.topNegativeFactors.length > 0 ? (
+              <ul className="space-y-3">
+                {screening.explanation.topNegativeFactors.map((factor: any, idx: number) => (
+                  <li key={idx} className="border-l-4 border-red-500 pl-3">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-semibold text-red-900 text-sm">{factor.factor}</span>
+                      <span className="text-red-700 font-bold text-sm">{factor.points} pts</span>
+                    </div>
+                    <p className="text-xs text-red-700">{factor.description}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-red-700">Sin observaciones negativas</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Improvement Suggestions */}
+      {screening.explanation && screening.explanation.improvementSuggestions.length > 0 && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-5">
+          <h3 className="font-bold text-blue-900 text-lg mb-3 flex items-center gap-2">
+            <span className="text-2xl">💡</span>
+            Sugerencias de Mejora (GDPR Art. 22)
+          </h3>
+          <ul className="space-y-2">
+            {screening.explanation.improvementSuggestions.map((suggestion: string, idx: number) => (
+              <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
+                <span className="text-blue-600 font-bold">•</span>
+                {suggestion}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Request Human Review Button */}
+      <div className="flex gap-4 justify-end">
+        <button className="px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-semibold">
+          Solicitar Revisión Manual
+        </button>
+        <button className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold">
+          Descargar Informe PDF
+        </button>
+      </div>
+    </div>
   );
 }
