@@ -7,6 +7,23 @@ export interface TenantScreening {
   documentNumber: string;
   monthlyIncome: number;
   employmentStatus: 'employed' | 'self-employed' | 'unemployed' | 'student';
+
+  // NEW: Employment stability fields
+  employmentYears?: number; // Years at current job
+  contractType?: 'indefinido' | 'temporal' | 'autonomo' | 'other';
+  employerName?: string;
+  industrySector?: string;
+
+  // NEW: Rental history
+  previousAddress?: string;
+  previousLandlordName?: string;
+  previousLandlordPhone?: string;
+  reasonForMoving?: string;
+  yearsAtPreviousAddress?: number;
+
+  // NEW: References
+  references?: Reference[];
+
   landlordId: string;
   propertyAddress: string;
   monthlyRent: number;
@@ -35,6 +52,48 @@ export interface ScreeningResult {
   referencesVerified: boolean;
   notes: string[];
   recommendations: string;
+
+  // NEW: Fraud detection
+  fraudFlags: FraudFlag[];
+  riskLevel: 'low' | 'medium' | 'high' | 'very_high';
+
+  // NEW: GDPR-compliant explanations
+  explanation: {
+    topPositiveFactors: ScoringFactor[];
+    topNegativeFactors: ScoringFactor[];
+    improvementSuggestions: string[];
+  };
+
+  // NEW: GDPR Article 22 compliance
+  humanReviewAvailable: boolean;
+  dataProcessingConsent?: {
+    asnefCheckConsented: boolean;
+    consentedAt: string;
+  };
+}
+
+export interface ScoringFactor {
+  factor: string;
+  points: number;
+  description: string;
+}
+
+export interface FraudFlag {
+  type: 'income_anomaly' | 'document_mismatch' | 'suspicious_ratio' | 'data_inconsistency';
+  severity: 'low' | 'medium' | 'high';
+  description: string;
+}
+
+export interface Reference {
+  id?: string;
+  type: 'employer' | 'previous_landlord' | 'personal';
+  name: string;
+  phone: string;
+  email?: string;
+  relationship: string;
+  verified: boolean;
+  verifiedAt?: Date;
+  notes?: string;
 }
 
 export interface LandlordProfile {

@@ -293,14 +293,15 @@ export class AsnefService {
   }
   
   /**
-   * Convierte score crediticio en puntos de scoring (0-25)
+   * Convierte score crediticio en puntos de scoring (0-30)
+   * UPDATED: Increased from 25 to 30 points max - credit is most predictive factor
    */
   static creditScoreToPoints(creditScore: number): number {
-    if (creditScore >= 800) return 25; // Excelente
-    if (creditScore >= 700) return 20; // Muy bueno
-    if (creditScore >= 600) return 15; // Bueno
-    if (creditScore >= 500) return 10; // Regular
-    if (creditScore >= 400) return 5;  // Malo
+    if (creditScore >= 800) return 30; // Excelente
+    if (creditScore >= 700) return 25; // Muy bueno
+    if (creditScore >= 600) return 20; // Bueno
+    if (creditScore >= 500) return 12; // Regular
+    if (creditScore >= 400) return 6;  // Malo
     return 0; // Muy malo
   }
   
