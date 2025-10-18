@@ -32,10 +32,11 @@ COMMENT ON COLUMN screenings.employer_name IS 'Current employer company name';
 -- ================================================================
 
 -- Add references as JSONB array
+-- Note: "references" is a reserved keyword in PostgreSQL, so we must quote it
 ALTER TABLE screenings
-ADD COLUMN IF NOT EXISTS references JSONB;
+ADD COLUMN IF NOT EXISTS "references" JSONB;
 
-COMMENT ON COLUMN screenings.references IS 'Array of references: [{type: employer|previous_landlord|personal, name, phone, email, relationship, verified, verifiedAt}]';
+COMMENT ON COLUMN screenings."references" IS 'Array of references: [{type: employer|previous_landlord|personal, name, phone, email, relationship, verified, verifiedAt}]';
 
 -- ================================================================
 -- PART 3: Add Rental History Fields
@@ -185,7 +186,7 @@ ALTER TABLE screenings DROP COLUMN IF EXISTS employment_years;
 ALTER TABLE screenings DROP COLUMN IF EXISTS contract_type;
 ALTER TABLE screenings DROP COLUMN IF EXISTS employer_name;
 ALTER TABLE screenings DROP COLUMN IF EXISTS industry_sector;
-ALTER TABLE screenings DROP COLUMN IF EXISTS references;
+ALTER TABLE screenings DROP COLUMN IF EXISTS "references";
 ALTER TABLE screenings DROP COLUMN IF EXISTS previous_address;
 ALTER TABLE screenings DROP COLUMN IF EXISTS previous_landlord_name;
 ALTER TABLE screenings DROP COLUMN IF EXISTS previous_landlord_phone;
