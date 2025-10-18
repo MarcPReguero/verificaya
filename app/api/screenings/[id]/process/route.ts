@@ -51,7 +51,7 @@ export async function POST(
       );
     }
 
-    // Calculate score
+    // Calculate score with all new fields
     const result = ScreeningService.calculateScore({
       id: screening.id,
       tenantName: screening.tenant_name,
@@ -60,6 +60,19 @@ export async function POST(
       employmentStatus: screening.employment_status,
       documentType: screening.document_type,
       documentNumber: screening.document_number,
+
+      // NEW: Employment stability fields
+      employmentYears: screening.employment_years,
+      contractType: screening.contract_type,
+      employerName: screening.employer_name,
+
+      // NEW: References
+      references: screening.references,
+
+      // NEW: Rental history
+      previousAddress: screening.previous_address,
+      previousLandlordName: screening.previous_landlord_name,
+      previousLandlordPhone: screening.previous_landlord_phone,
     });
 
     // Generate PDF report with demo flag
@@ -108,7 +121,7 @@ export async function POST(
       .from('reports')
       .getPublicUrl(fileName);
 
-    // Update screening with results
+    // Update screening with complete results
     const { error: updateError } = await supabase
       .from('screenings')
       .update({
@@ -116,6 +129,12 @@ export async function POST(
         score: result.score,
         report_url: urlData.publicUrl,
         completed_at: new Date().toISOString(),
+
+        // NEW: Save advanced scoring results
+        risk_level: result.riskLevel,
+        fraud_flags: result.fraudFlags,
+        explanation: result.explanation,
+        human_review_available: result.humanReviewAvailable,
       })
       .eq('id', screeningId);
 
