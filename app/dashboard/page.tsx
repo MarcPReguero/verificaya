@@ -4,9 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 
-// Mock data - replace with real data from DB
-const mockScreenings = [
+// DEPRECATED: Mock data for demo/testing only
+const mockScreeningsForDemo = [
   {
     id: '1',
     tenantName: 'Juan García López',
@@ -93,12 +94,73 @@ export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
   const [expandedScreening, setExpandedScreening] = useState<string | null>(null);
+  const [screenings, setScreenings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
     }
   }, [isAuthenticated, router]);
+
+  // Fetch screenings from Supabase
+  useEffect(() => {
+    async function fetchScreenings() {
+      if (!user?.email) return;
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // For demo user, show mock data
+        if (user.email === 'demo') {
+          setScreenings(mockScreeningsForDemo);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch real screenings for authenticated users
+        const { data, error: fetchError } = await supabase
+          .from('screenings')
+          .select('*')
+          .eq('landlord_email', user.email)
+          .order('created_at', { ascending: false });
+
+        if (fetchError) throw fetchError;
+
+        // Transform database data to match our component format
+        const transformedScreenings = (data || []).map((screening: any) => ({
+          id: screening.id,
+          tenantName: screening.tenant_name,
+          propertyAddress: screening.property_address,
+          status: screening.status,
+          score: screening.score,
+          riskLevel: screening.risk_level,
+          fraudFlags: screening.fraud_flags || [],
+          explanation: screening.explanation || {
+            topPositiveFactors: [],
+            topNegativeFactors: [],
+            improvementSuggestions: [],
+          },
+          createdAt: new Date(screening.created_at),
+          completedAt: screening.completed_at ? new Date(screening.completed_at) : undefined,
+          isDemo: screening.is_demo || false,
+        }));
+
+        setScreenings(transformedScreenings);
+      } catch (err: any) {
+        console.error('Error fetching screenings:', err);
+        setError(err.message);
+        // Fallback to empty array on error
+        setScreenings([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchScreenings();
+  }, [user]);
   return (
     <main className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -159,20 +221,62 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Error State */}
+        {error && (
+          <div className="mb-6 p-5 bg-red-50 border-2 border-red-200 rounded-xl">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="font-bold text-red-900 text-lg mb-1">Error al cargar verificaciones</h3>
+                <p className="text-sm text-red-700">{error}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm font-semibold"
+                >
+                  Reintentar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <StatCard title="Total Verificaciones" value="4" />
-          <StatCard title="Completadas" value="2" color="green" />
-          <StatCard title="En Proceso" value="1" color="yellow" />
-          <StatCard title="Pendientes" value="1" color="blue" />
+          <StatCard
+            title="Total Verificaciones"
+            value={loading ? '...' : screenings.length.toString()}
+          />
+          <StatCard
+            title="Completadas"
+            value={loading ? '...' : screenings.filter(s => s.status === 'completed').length.toString()}
+            color="green"
+          />
+          <StatCard
+            title="En Proceso"
+            value={loading ? '...' : screenings.filter(s => s.status === 'processing').length.toString()}
+            color="yellow"
+          />
+          <StatCard
+            title="Pendientes"
+            value={loading ? '...' : screenings.filter(s => s.status === 'pending').length.toString()}
+            color="blue"
+          />
         </div>
 
         {/* Screenings List */}
         <div className="bg-white rounded-xl shadow-sm">
           <div className="p-6 border-b">
-            <h2 className="text-2xl font-bold text-gray-900">Verificaciones</h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-2xl font-bold text-gray-900">Verificaciones</h2>
+              {loading && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 rounded-full border-t-transparent"></div>
+                  Cargando...
+                </div>
+              )}
+            </div>
           </div>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100">
@@ -201,7 +305,17 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {mockScreenings.map((screening) => (
+                {loading && screenings.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="animate-spin h-8 w-8 border-3 border-blue-600 rounded-full border-t-transparent"></div>
+                        <p className="text-gray-600">Cargando verificaciones...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  screenings.map((screening) => (
                   <>
                     <tr
                       key={screening.id}
@@ -280,12 +394,13 @@ export default function Dashboard() {
                       </tr>
                     )}
                   </>
-                ))}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
-          {mockScreenings.length === 0 && (
+          {!loading && screenings.length === 0 && (
             <div className="p-12 text-center">
               <div className="text-gray-400 text-6xl mb-4">📋</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
