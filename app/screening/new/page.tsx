@@ -22,20 +22,37 @@ function NewScreeningContent() {
     tenantPhone: '',
     documentType: 'DNI',
     documentNumber: '',
-    
+
     // Employment
     monthlyIncome: '',
     employmentStatus: 'employed' as const,
-    
+    employmentYears: '',       // NEW
+    contractType: '' as '' | 'indefinido' | 'temporal' | 'autonomo' | 'other', // NEW
+    employerName: '',          // NEW
+
+    // References - NEW
+    references: [] as Array<{
+      type: 'employer' | 'previous_landlord' | 'personal';
+      name: string;
+      phone: string;
+      email?: string;
+      relationship: string;
+    }>,
+
+    // Rental history - NEW
+    previousAddress: '',
+    previousLandlordName: '',
+    previousLandlordPhone: '',
+
     // Property
     propertyAddress: '',
     monthlyRent: '',
-    
+
     // Landlord
     landlordName: '',
     landlordEmail: '',
     landlordPhone: '',
-    
+
     // Package
     packageType: 'complete' as 'basic' | 'complete',
     billingMode: 'payperuse' as 'payperuse' | 'subscription',
@@ -70,6 +87,12 @@ function NewScreeningContent() {
           ...formData,
           monthlyIncome: parseFloat(formData.monthlyIncome),
           monthlyRent: parseFloat(formData.monthlyRent),
+          employmentYears: formData.employmentYears ? parseFloat(formData.employmentYears) : undefined,
+          // Mark all references as unverified initially
+          references: formData.references.map(ref => ({
+            ...ref,
+            verified: false
+          })),
           isDemo: isDemoMode, // Flag to skip payment and mark as demo
         }),
       });
@@ -164,14 +187,14 @@ function NewScreeningContent() {
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
-          {[1, 2, 3, 4].map((s) => (
+          {[1, 2, 3, 4, 5].map((s) => (
             <div key={s} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold ${
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
                 step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
               }`}>
                 {s}
               </div>
-              {s < 4 && <div className={`w-20 h-1 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+              {s < 5 && <div className={`w-16 h-1 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
             </div>
           ))}
         </div>
@@ -332,7 +355,7 @@ function NewScreeningContent() {
           {step === 2 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Situación Laboral</h2>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Estado Laboral *
@@ -350,6 +373,69 @@ function NewScreeningContent() {
                 </select>
               </div>
 
+              {/* NEW: Employment Stability Fields */}
+              {(formData.employmentStatus === 'employed' || formData.employmentStatus === 'self-employed') && (
+                <>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        Años en el empleo actual *
+                        <span className="ml-2 text-xs text-blue-600 font-normal">
+                          Mejora tu puntuación
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        required
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        value={formData.employmentYears}
+                        onChange={(e) => setFormData({...formData, employmentYears: e.target.value})}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                        placeholder="2.5"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Ejemplo: 2.5 para 2 años y medio
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        Tipo de contrato *
+                        <span className="ml-2 text-xs text-blue-600 font-normal">
+                          +5 pts si indefinido
+                        </span>
+                      </label>
+                      <select
+                        required
+                        value={formData.contractType}
+                        onChange={(e) => setFormData({...formData, contractType: e.target.value as any})}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
+                      >
+                        <option value="">Selecciona...</option>
+                        <option value="indefinido">Indefinido</option>
+                        <option value="temporal">Temporal</option>
+                        <option value="autonomo">Autónomo</option>
+                        <option value="other">Otro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Nombre del empleador (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.employerName}
+                      onChange={(e) => setFormData({...formData, employerName: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                      placeholder="Empresa XYZ S.L."
+                    />
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Ingresos Mensuales Netos (€) *
@@ -362,6 +448,21 @@ function NewScreeningContent() {
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                   placeholder="2000"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Tus ingresos netos mensuales (después de impuestos)
+                </p>
+              </div>
+
+              {/* Info box about scoring */}
+              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-2">
+                  <span className="text-blue-600 text-xl">💡</span>
+                  <div className="text-sm text-gray-700">
+                    <strong className="text-blue-900">Tip:</strong> Proporcionar detalles sobre tu estabilidad laboral
+                    puede mejorar tu puntuación hasta en 13 puntos. Un contrato indefinido y 3+ años de antigüedad
+                    son los mejor valorados.
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-4">
@@ -383,8 +484,223 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 3: Property */}
+          {/* Step 3: References & Rental History - NEW! */}
           {step === 3 && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Referencias e Historial</h2>
+
+              {/* Rental History */}
+              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
+                <div className="flex items-start gap-2 mb-4">
+                  <span className="text-2xl">🏠</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Historial de Alquiler</h3>
+                    <p className="text-sm text-gray-600">
+                      Opcional pero recomendado - ayuda a mejorar tu puntuación
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Dirección anterior (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.previousAddress}
+                      onChange={(e) => setFormData({...formData, previousAddress: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                      placeholder="Calle Example, 45, Barcelona"
+                    />
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        Nombre del anterior casero (opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.previousLandlordName}
+                        onChange={(e) => setFormData({...formData, previousLandlordName: e.target.value})}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                        placeholder="José Martínez"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-900 mb-2">
+                        Teléfono del casero (opcional)
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.previousLandlordPhone}
+                        onChange={(e) => setFormData({...formData, previousLandlordPhone: e.target.value})}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                        placeholder="+34 600 000 000"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* References */}
+              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
+                <div className="flex items-start gap-2 mb-4">
+                  <span className="text-2xl">👥</span>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-gray-900">
+                      Referencias
+                      <span className="ml-2 text-xs bg-purple-600 text-white px-2 py-1 rounded-full">
+                        +10 puntos
+                      </span>
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      Proporciona al menos 2 referencias para maximizar tu puntuación
+                    </p>
+                  </div>
+                </div>
+
+                {formData.references.map((ref, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 mb-3 border border-gray-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <span className="font-semibold text-gray-900">Referencia {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newRefs = formData.references.filter((_, i) => i !== index);
+                          setFormData({...formData, references: newRefs});
+                        }}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Tipo de referencia
+                        </label>
+                        <select
+                          value={ref.type}
+                          onChange={(e) => {
+                            const newRefs = [...formData.references];
+                            newRefs[index] = {...ref, type: e.target.value as any};
+                            setFormData({...formData, references: newRefs});
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
+                        >
+                          <option value="employer">Empleador</option>
+                          <option value="previous_landlord">Anterior casero</option>
+                          <option value="personal">Personal</option>
+                        </select>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Nombre completo
+                          </label>
+                          <input
+                            type="text"
+                            value={ref.name}
+                            onChange={(e) => {
+                              const newRefs = [...formData.references];
+                              newRefs[index] = {...ref, name: e.target.value};
+                              setFormData({...formData, references: newRefs});
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                            placeholder="Nombre"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Teléfono
+                          </label>
+                          <input
+                            type="tel"
+                            value={ref.phone}
+                            onChange={(e) => {
+                              const newRefs = [...formData.references];
+                              newRefs[index] = {...ref, phone: e.target.value};
+                              setFormData({...formData, references: newRefs});
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                            placeholder="+34 600 000 000"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Relación/Empresa
+                        </label>
+                        <input
+                          type="text"
+                          value={ref.relationship}
+                          onChange={(e) => {
+                            const newRefs = [...formData.references];
+                            newRefs[index] = {...ref, relationship: e.target.value};
+                            setFormData({...formData, references: newRefs});
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                          placeholder="Ej: Jefe directo en Tech Corp SL"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      references: [...formData.references, {
+                        type: 'employer',
+                        name: '',
+                        phone: '',
+                        email: '',
+                        relationship: ''
+                      }]
+                    });
+                  }}
+                  className="w-full py-3 border-2 border-dashed border-purple-300 rounded-lg text-purple-700 hover:bg-purple-50 transition font-semibold"
+                >
+                  + Añadir Referencia
+                </button>
+              </div>
+
+              {/* Skip option */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-800">
+                  <strong>Nota:</strong> Puedes omitir este paso, pero proporcionar referencias verificables
+                  mejora significativamente tu puntuación (+10 puntos por 2 referencias).
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(4)}
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: Property */}
+          {step === 4 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos de la Propiedad</h2>
               
@@ -419,14 +735,14 @@ function NewScreeningContent() {
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setStep(2)}
+                  onClick={() => setStep(3)}
                   className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
                 >
                   Anterior
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStep(4)}
+                  onClick={() => setStep(5)}
                   className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
                 >
                   Siguiente
@@ -435,8 +751,8 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 4: Landlord & Package */}
-          {step === 4 && (
+          {/* Step 5: Landlord & Package */}
+          {step === 5 && (
             <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Tus Datos y Paquete</h2>
               
@@ -632,7 +948,7 @@ function NewScreeningContent() {
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setStep(3)}
+                  onClick={() => setStep(4)}
                   disabled={submitting}
                   className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 >
