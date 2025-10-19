@@ -47,6 +47,14 @@ export async function signUp(email: string, password: string, name: string) {
       }
     }
 
+    // 3. Ensure cookies are set immediately
+    if (authData.session && typeof window !== 'undefined') {
+      const isProduction = window.location.protocol === 'https:';
+      const secureFlag = isProduction ? '; Secure' : '';
+      document.cookie = `sb-access-token=${authData.session.access_token}; path=/; max-age=3600; SameSite=Lax${secureFlag}`;
+      document.cookie = `sb-refresh-token=${authData.session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${secureFlag}`;
+    }
+
     return { user: authData.user, session: authData.session, error: null };
   } catch (error: any) {
     return { user: null, session: null, error: error.message };
@@ -64,6 +72,14 @@ export async function signIn(email: string, password: string) {
     });
 
     if (error) throw error;
+
+    // Ensure cookies are set immediately
+    if (data.session && typeof window !== 'undefined') {
+      const isProduction = window.location.protocol === 'https:';
+      const secureFlag = isProduction ? '; Secure' : '';
+      document.cookie = `sb-access-token=${data.session.access_token}; path=/; max-age=3600; SameSite=Lax${secureFlag}`;
+      document.cookie = `sb-refresh-token=${data.session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${secureFlag}`;
+    }
 
     return { user: data.user, session: data.session, error: null };
   } catch (error: any) {

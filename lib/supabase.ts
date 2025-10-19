@@ -14,12 +14,26 @@ const customStorage = {
     window.localStorage.setItem(key, value);
 
     // Also set as cookie for server-side access
-    const session = JSON.parse(value);
-    if (session.access_token) {
-      document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=3600; SameSite=Lax`;
-    }
-    if (session.refresh_token) {
-      document.cookie = `sb-refresh-token=${session.refresh_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+    try {
+      const data = JSON.parse(value);
+      // Supabase stores the session in different formats, check both
+      const accessToken = data?.access_token || data?.currentSession?.access_token;
+      const refreshToken = data?.refresh_token || data?.currentSession?.refresh_token;
+
+      if (accessToken) {
+        // Don't use Secure flag for localhost development
+        const isProduction = window.location.protocol === 'https:';
+        const secureFlag = isProduction ? '; Secure' : '';
+        document.cookie = `sb-access-token=${accessToken}; path=/; max-age=3600; SameSite=Lax${secureFlag}`;
+      }
+      if (refreshToken) {
+        const isProduction = window.location.protocol === 'https:';
+        const secureFlag = isProduction ? '; Secure' : '';
+        document.cookie = `sb-refresh-token=${refreshToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${secureFlag}`;
+      }
+    } catch (e) {
+      // If parsing fails, just store in localStorage
+      console.error('Error parsing session for cookies:', e);
     }
   },
   removeItem: (key: string) => {
