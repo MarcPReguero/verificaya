@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Ensure base URL doesn't have trailing slash
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://verificaya.es';
+
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -32,8 +35,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'payment',
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/screening/${screeningId}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/screening/new`,
+      success_url: `${baseUrl}/screening/${screeningId}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/screening/new`,
       customer_email: landlordEmail,
       metadata: {
         screeningId,

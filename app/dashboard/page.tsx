@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
 // DEPRECATED: Mock data for demo/testing only
@@ -99,10 +99,10 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!loading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, loading, router]);
 
   // Fetch screenings from Supabase
   useEffect(() => {

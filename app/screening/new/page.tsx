@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
+import { useAuth } from '@/lib/hooks/useAuth';
 import DocumentUpload from '@/components/forms/DocumentUpload';
 
 // Mark this route as dynamic to prevent static generation errors
