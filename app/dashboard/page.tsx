@@ -6,90 +6,6 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 
-// DEPRECATED: Mock data for demo/testing only
-const mockScreeningsForDemo = [
-  {
-    id: '1',
-    tenantName: 'Juan García López',
-    propertyAddress: 'Calle Gran Vía, 123, Barcelona',
-    status: 'completed',
-    score: 85,
-    riskLevel: 'low',
-    fraudFlags: [],
-    explanation: {
-      topPositiveFactors: [
-        { factor: 'Relación ingresos/alquiler', points: 25, description: 'Ingresos son 3.5x del alquiler mensual' },
-        { factor: 'Historial crediticio', points: 30, description: 'Score crediticio excelente (850/1000)' },
-        { factor: 'Estabilidad laboral', points: 8, description: '5 años en el empleo actual' },
-      ],
-      topNegativeFactors: [],
-      improvementSuggestions: [],
-    },
-    createdAt: new Date('2025-10-10'),
-    completedAt: new Date('2025-10-11'),
-    isDemo: false,
-  },
-  {
-    id: '2',
-    tenantName: 'María Rodríguez',
-    propertyAddress: 'Passeig de Gràcia, 45, Barcelona',
-    status: 'processing',
-    createdAt: new Date('2025-10-12'),
-    isDemo: false,
-  },
-  {
-    id: '3',
-    tenantName: 'Carlos Martínez',
-    propertyAddress: 'Carrer de Balmes, 200, Barcelona',
-    status: 'completed',
-    score: 58,
-    riskLevel: 'high',
-    fraudFlags: [
-      { type: 'suspicious_ratio', severity: 'high', description: 'Alquiler supera el 50% de los ingresos' },
-      { type: 'data_inconsistency', severity: 'high', description: 'Inclusión reciente en ASNEF (2 meses)' },
-    ],
-    explanation: {
-      topPositiveFactors: [
-        { factor: 'Verificación de identidad', points: 10, description: 'Documento DNI validado correctamente' },
-      ],
-      topNegativeFactors: [
-        { factor: 'Relación ingresos/alquiler', points: -20, description: 'El alquiler representa más del 50% de los ingresos' },
-        { factor: 'Historial crediticio ASNEF', points: -8, description: 'Deuda activa: €1,200 registrada hace 2 meses' },
-        { factor: 'Referencias', points: -10, description: 'No se proporcionaron referencias' },
-      ],
-      improvementSuggestions: [
-        'Buscar una propiedad con alquiler más bajo',
-        'Resolver deudas pendientes en ASNEF',
-        'Proporcionar al menos 2 referencias verificables',
-      ],
-    },
-    createdAt: new Date('2025-10-12'),
-    completedAt: new Date('2025-10-12'),
-    isDemo: false,
-  },
-  {
-    id: 'demo-1',
-    tenantName: 'Ana Demo Usuario',
-    propertyAddress: 'Rambla de Catalunya, 50, Barcelona',
-    status: 'completed',
-    score: 92,
-    riskLevel: 'low',
-    fraudFlags: [],
-    explanation: {
-      topPositiveFactors: [
-        { factor: 'Relación ingresos/alquiler', points: 25, description: 'Ingresos son 4x del alquiler mensual' },
-        { factor: 'Historial crediticio', points: 30, description: 'Score crediticio excelente (920/1000)' },
-        { factor: 'Tipo de contrato', points: 5, description: 'Contrato indefinido - máxima seguridad laboral' },
-      ],
-      topNegativeFactors: [],
-      improvementSuggestions: [],
-    },
-    createdAt: new Date('2025-10-12'),
-    completedAt: new Date('2025-10-12'),
-    isDemo: true,
-  },
-];
-
 export default function Dashboard() {
   const router = useRouter();
   const { isAuthenticated, user, logout } = useAuth();
@@ -113,14 +29,7 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
-        // For demo user, show mock data
-        if (user.email === 'demo') {
-          setScreenings(mockScreeningsForDemo);
-          setLoading(false);
-          return;
-        }
-
-        // Fetch real screenings for authenticated users
+        // Fetch screenings for authenticated users
         const { data, error: fetchError } = await supabase
           .from('screenings')
           .select('*')
@@ -145,7 +54,6 @@ export default function Dashboard() {
           },
           createdAt: new Date(screening.created_at),
           completedAt: screening.completed_at ? new Date(screening.completed_at) : undefined,
-          isDemo: screening.is_demo || false,
         }));
 
         setScreenings(transformedScreenings);
@@ -205,22 +113,6 @@ export default function Dashboard() {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Demo User Info Banner */}
-        {user?.email === 'demo' && (
-          <div className="mb-6 p-5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl shadow-lg">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🎯</span>
-              <div>
-                <h3 className="font-bold text-lg mb-1">Panel Demo Activo</h3>
-                <p className="text-green-50 text-sm">
-                  Estás usando una cuenta demo. Puedes crear verificaciones ilimitadas 
-                  <strong> sin ningún costo</strong> y explorar todas las funcionalidades del sistema.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Error State */}
         {error && (
           <div className="mb-6 p-5 bg-red-50 border-2 border-red-200 rounded-xl">
@@ -325,11 +217,6 @@ export default function Dashboard() {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <div className="text-sm font-semibold text-gray-900">{screening.tenantName}</div>
-                          {screening.isDemo && (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-bold rounded">
-                              DEMO
-                            </span>
-                          )}
                           {screening.fraudFlags && screening.fraudFlags.length > 0 && (
                             <span className="px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded flex items-center gap-1">
                               ⚠ {screening.fraudFlags.length}

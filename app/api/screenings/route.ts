@@ -122,8 +122,7 @@ export async function POST(request: NextRequest) {
         property_address: body.propertyAddress,
         monthly_rent: body.monthlyRent,
         package_type: body.packageType,
-        status: body.isDemo ? 'completed' : 'pending', // Auto-complete demo screenings
-        is_demo: body.isDemo || false,
+        status: 'pending',
       })
       .select()
       .single();

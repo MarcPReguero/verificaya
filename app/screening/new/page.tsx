@@ -14,7 +14,6 @@ function NewScreeningContent() {
   const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
-  const [isDemo, setIsDemo] = useState(false);
   const [formData, setFormData] = useState({
     // Tenant info
     tenantName: '',
@@ -62,23 +61,12 @@ function NewScreeningContent() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Check if demo mode is enabled from URL
-  useEffect(() => {
-    const demoParam = searchParams.get('demo');
-    if (demoParam === 'true') {
-      setIsDemo(true);
-    }
-  }, [searchParams]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
 
     try {
-      // Check if in demo mode or demo user
-      const isDemoMode = isDemo || (isAuthenticated && user?.email === 'demo');
-
       // 1. Create screening
       const response = await fetch('/api/screenings', {
         method: 'POST',
@@ -93,7 +81,6 @@ function NewScreeningContent() {
             ...ref,
             verified: false
           })),
-          isDemo: isDemoMode, // Flag to skip payment and mark as demo
         }),
       });
 
@@ -103,14 +90,7 @@ function NewScreeningContent() {
         throw new Error(data.error || 'Error al crear verificación');
       }
 
-      // 2. For demo mode, skip payment and go directly to success page
-      if (isDemoMode) {
-        // Simulate immediate processing for demo
-        router.push(`/screening/${data.screeningId}/success?demo=true`);
-        return;
-      }
-
-      // 3. For regular users, create Stripe checkout session
+      // 2. Create Stripe checkout session
       const checkoutResponse = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,7 +107,7 @@ function NewScreeningContent() {
         throw new Error(checkoutData.error || 'Error al crear sesión de pago');
       }
 
-      // 4. Redirect to Stripe Checkout
+      // 3. Redirect to Stripe Checkout
       if (checkoutData.url) {
         window.location.href = checkoutData.url;
       }
@@ -148,42 +128,6 @@ function NewScreeningContent() {
           <h1 className="text-3xl font-bold text-gray-900">Nueva Verificación de Inquilino</h1>
           <p className="text-gray-600 mt-2">Completa el formulario para iniciar el proceso</p>
         </div>
-
-        {/* Demo User Banner */}
-        {(isDemo || (isAuthenticated && user?.email === 'demo')) && (
-          <div className="mb-6 p-5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl shadow-lg border-2 border-green-300">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">🎯</span>
-              <div>
-                <h3 className="font-bold text-lg mb-1">Modo Demo Activo - Prueba Gratuita</h3>
-                <p className="text-green-50 text-sm">
-                  Estás probando VerificaYa <strong>sin pagar</strong>. 
-                  Completa el formulario y verás un informe de muestra con marca de agua "DEMO". 
-                  El proceso se completará automáticamente para que explores todas las funcionalidades.
-                </p>
-                <p className="text-green-100 text-xs mt-2 font-semibold">
-                  ℹ️ Los informes demo NO son válidos para uso legal. Para verificaciones reales, usa el modo estándar.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Legacy Demo User Banner (kept for backward compatibility) */}
-        {isAuthenticated && user?.email === 'demo' && !isDemo && (
-          <div className="mb-6 p-5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl shadow-lg">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">✨</span>
-              <div>
-                <h3 className="font-bold text-lg mb-1">Modo Demo Activo</h3>
-                <p className="text-green-50 text-sm">
-                  Como usuario demo, puedes crear verificaciones <strong>sin pagar</strong>. 
-                  El proceso se completará automáticamente para que puedas explorar todas las funcionalidades.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">

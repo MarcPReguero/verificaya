@@ -117,20 +117,14 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center items-center mb-6">
-            <Link 
-              href="/screening/new" 
+            <Link
+              href="/signup"
               className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 transition text-base sm:text-lg font-bold shadow-lg text-center"
             >
-              Iniciar Verificación
+              Comenzar Ahora
             </Link>
-            <Link 
-              href="/screening/new?demo=true" 
-              className="w-full sm:w-auto px-8 sm:px-10 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 transition text-base sm:text-lg font-bold shadow-lg text-center"
-            >
-              🎯 Prueba Demo Gratis
-            </Link>
-            <Link 
-              href="#casos-reales" 
+            <Link
+              href="#casos-reales"
               className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-white text-blue-700 rounded-xl border-2 border-blue-300 hover:bg-blue-50 transition text-base sm:text-lg font-semibold shadow text-center"
             >
               Ver Casos de Uso
