@@ -29,25 +29,27 @@ export async function signUp(email: string, password: string, name: string) {
 
     if (signUpError) throw signUpError;
 
-    // 2. Create landlord record
+    // 2. Create or update landlord record using upsert
     if (authData.user) {
       const { error: landlordError } = await supabase
         .from('landlords')
-        .insert({
+        .upsert({
           id: authData.user.id,
           email: email,
           name: name,
+        }, {
+          onConflict: 'id',
         });
 
       if (landlordError) {
-        console.error('Error creating landlord record:', landlordError);
+        console.error('Error upserting landlord record:', landlordError);
         // Continue anyway, user is created in auth
       }
     }
 
-    return { user: authData.user, error: null };
+    return { user: authData.user, session: authData.session, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, session: null, error: error.message };
   }
 }
 
@@ -63,9 +65,9 @@ export async function signIn(email: string, password: string) {
 
     if (error) throw error;
 
-    return { user: data.user, error: null };
+    return { user: data.user, session: data.session, error: null };
   } catch (error: any) {
-    return { user: null, error: error.message };
+    return { user: null, session: null, error: error.message };
   }
 }
 

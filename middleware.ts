@@ -10,9 +10,9 @@ const authRoutes = ['/login', '/signup'];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Get session token from cookies
-  const sessionToken = request.cookies.get('sb-access-token')?.value;
-  const isAuthenticated = !!sessionToken;
+  // Get session token from cookies (set by our custom storage in supabase.ts)
+  const accessToken = request.cookies.get('sb-access-token')?.value;
+  const isAuthenticated = !!accessToken;
 
   // Check if route requires authentication
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
