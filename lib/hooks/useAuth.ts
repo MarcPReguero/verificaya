@@ -32,7 +32,8 @@ export function useAuth() {
   const logout = async () => {
     await authSignOut();
     setUser(null);
-    router.push('/login');
+    // Force full page reload to clear all state and cookies
+    window.location.href = '/login';
   };
 
   return {

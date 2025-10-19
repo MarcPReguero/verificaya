@@ -8,17 +8,17 @@ import { supabase } from '@/lib/supabase';
 
 export default function Dashboard() {
   const router = useRouter();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, user, logout, loading: authLoading } = useAuth();
   const [expandedScreening, setExpandedScreening] = useState<string | null>(null);
   const [screenings, setScreenings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [fetchingScreenings, setFetchingScreenings] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
+    if (!authLoading && !isAuthenticated) {
       router.push('/login');
     }
-  }, [isAuthenticated, loading, router]);
+  }, [isAuthenticated, authLoading, router]);
 
   // Fetch screenings from Supabase
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function Dashboard() {
       if (!user?.email) return;
 
       try {
-        setLoading(true);
+        setFetchingScreenings(true);
         setError(null);
 
         // Fetch screenings for authenticated users
@@ -63,7 +63,7 @@ export default function Dashboard() {
         // Fallback to empty array on error
         setScreenings([]);
       } finally {
-        setLoading(false);
+        setFetchingScreenings(false);
       }
     }
 
@@ -136,21 +136,21 @@ export default function Dashboard() {
         <div className="grid md:grid-cols-4 gap-6 mb-8">
           <StatCard
             title="Total Verificaciones"
-            value={loading ? '...' : screenings.length.toString()}
+            value={fetchingScreenings ? '...' : screenings.length.toString()}
           />
           <StatCard
             title="Completadas"
-            value={loading ? '...' : screenings.filter(s => s.status === 'completed').length.toString()}
+            value={fetchingScreenings ? '...' : screenings.filter(s => s.status === 'completed').length.toString()}
             color="green"
           />
           <StatCard
             title="En Proceso"
-            value={loading ? '...' : screenings.filter(s => s.status === 'processing').length.toString()}
+            value={fetchingScreenings ? '...' : screenings.filter(s => s.status === 'processing').length.toString()}
             color="yellow"
           />
           <StatCard
             title="Pendientes"
-            value={loading ? '...' : screenings.filter(s => s.status === 'pending').length.toString()}
+            value={fetchingScreenings ? '...' : screenings.filter(s => s.status === 'pending').length.toString()}
             color="blue"
           />
         </div>
@@ -160,7 +160,7 @@ export default function Dashboard() {
           <div className="p-6 border-b">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold text-gray-900">Verificaciones</h2>
-              {loading && (
+              {fetchingScreenings && (
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <div className="animate-spin h-4 w-4 border-2 border-blue-600 rounded-full border-t-transparent"></div>
                   Cargando...
@@ -197,7 +197,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {loading && screenings.length === 0 ? (
+                {fetchingScreenings && screenings.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-6 py-12 text-center">
                       <div className="flex flex-col items-center gap-3">
@@ -287,7 +287,7 @@ export default function Dashboard() {
             </table>
           </div>
 
-          {!loading && screenings.length === 0 && (
+          {!fetchingScreenings && screenings.length === 0 && (
             <div className="p-12 text-center">
               <div className="text-gray-400 text-6xl mb-4">📋</div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -296,7 +296,7 @@ export default function Dashboard() {
               <p className="text-gray-600 mb-6">
                 Inicia tu primera verificación de inquilino
               </p>
-              <Link 
+              <Link
                 href="/screening/new"
                 className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
               >
