@@ -75,10 +75,7 @@ export async function POST(
       previousLandlordPhone: screening.previous_landlord_phone,
     });
 
-    // Generate PDF report with demo flag
-    const isDemo = screening.status === 'completed' && screening.created_at && 
-                  (Date.now() - new Date(screening.created_at).getTime() < 5000); // Demo if just created
-    
+    // Generate PDF report
     const pdfBlob = await ReportService.generatePDFReport(
       {
         id: screening.id,
@@ -97,7 +94,7 @@ export async function POST(
         createdAt: new Date(screening.created_at),
       } as TenantScreening,
       result,
-      isDemo // Pass demo flag
+      false // Not demo
     );
 
     // Upload PDF to Supabase Storage

@@ -54,6 +54,7 @@ export default function Dashboard() {
           },
           createdAt: new Date(screening.created_at),
           completedAt: screening.completed_at ? new Date(screening.completed_at) : undefined,
+          reportUrl: screening.report_url,
         }));
 
         setScreenings(transformedScreenings);
@@ -254,15 +255,19 @@ export default function Dashboard() {
                         {screening.createdAt.toLocaleDateString('es-ES')}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        {screening.status === 'completed' ? (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              // Handle PDF download
-                            }}
+                        {screening.status === 'completed' && screening.reportUrl ? (
+                          <a
+                            href={screening.reportUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="text-blue-600 hover:text-blue-800 font-semibold hover:underline"
                           >
                             Ver Informe
+                          </a>
+                        ) : screening.status === 'completed' ? (
+                          <button className="text-yellow-600 cursor-wait">
+                            Generando...
                           </button>
                         ) : (
                           <button className="text-gray-500 cursor-not-allowed">
