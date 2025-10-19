@@ -25,8 +25,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Redirect to dashboard
-    router.push('/dashboard');
+    // Force full page reload to ensure cookies are available to middleware
+    window.location.href = '/dashboard';
   };
 
   return (
