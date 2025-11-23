@@ -2,6 +2,8 @@ import { TenantScreening, ScreeningResult, FraudFlag, ScoringFactor } from '@/ty
 import { AsnefService, CreditCheckResult } from './asnef.service';
 
 export class ScreeningService {
+  private static readonly MIN_LIVING_EXPENSES = 600; // Minimum monthly amount needed for living expenses (conservative)
+
   /**
    * Calculate screening score based on multiple factors
    * Now includes ASNEF credit check integration, employment stability,
@@ -77,6 +79,44 @@ export class ScreeningService {
           description: 'Patrón inusual: Ingresos muy altos para alquiler modesto'
         });
         notes.push('⚠ Patrón inusual detectado - revisión manual recomendada');
+      }
+
+      // NEW: Disposable Income Check
+      const disposableIncome = screening.monthlyIncome - screening.monthlyRent;
+      if (disposableIncome < ScreeningService.MIN_LIVING_EXPENSES) {
+        score -= 15;
+        notes.push(`⚠️ RIESGO ALTO: Ingresos disponibles (€${disposableIncome}) inferiores al mínimo vital (€${ScreeningService.MIN_LIVING_EXPENSES})`);
+        negativeFactors.push({
+          factor: 'Capacidad de pago',
+          points: -15,
+          description: 'Ingresos insuficientes para cubrir gastos de vida básicos tras pagar el alquiler'
+        });
+      }
+
+      // NEW: Debt-to-Income (DTI) Ratio
+      // We estimate monthly debt payments as 3% of total debt if exact payments aren't known
+      if (creditCheckResult && creditCheckResult.totalDebt > 0) {
+        const estimatedDebtPayment = creditCheckResult.totalDebt * 0.03;
+        const totalMonthlyObligations = screening.monthlyRent + estimatedDebtPayment;
+        const dtiRatio = totalMonthlyObligations / screening.monthlyIncome;
+
+        if (dtiRatio > 0.45) { // >45% is very high risk
+          score -= 15;
+          notes.push(`⚠️ SOBREENDEUDAMIENTO: Ratio DTI ${(dtiRatio * 100).toFixed(0)}% (Alquiler + Deudas > 45% ingresos)`);
+          negativeFactors.push({
+            factor: 'Endeudamiento',
+            points: -15,
+            description: 'Alto nivel de endeudamiento en relación a los ingresos'
+          });
+        } else if (dtiRatio > 0.35) { // >35% is warning
+          score -= 5;
+          notes.push(`⚠ Endeudamiento elevado: Ratio DTI ${(dtiRatio * 100).toFixed(0)}%`);
+          negativeFactors.push({
+            factor: 'Endeudamiento',
+            points: -5,
+            description: 'Nivel de endeudamiento considerable'
+          });
+        }
       }
     }
 
@@ -178,6 +218,22 @@ export class ScreeningService {
       }
 
       score += Math.min(employmentPoints, 25); // Cap at 25 points
+
+      // NEW: Consistency Checks (Fraud Detection)
+      // Check 1: Unemployed but High Income
+      if (screening.employmentStatus === 'unemployed' && screening.monthlyIncome && screening.monthlyIncome > 2000) {
+        fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'high',
+          description: 'Inconsistencia: Desempleado con ingresos altos (>€2000)'
+        });
+        notes.push('⚠️ ALERTA: Desempleado declarando ingresos altos - Verificar fuente de ingresos');
+      }
+
+      // Check 2: Student with High Income and No Guarantor (Implicit check)
+      if (screening.employmentStatus === 'student' && screening.monthlyIncome && screening.monthlyIncome > 1500) {
+        notes.push('ℹ️ Estudiante con ingresos altos - Verificar si son becas o ayuda familiar');
+      }
     }
 
     // 3. Document Verification (10 points max - reduced, it's hygiene not predictor)
