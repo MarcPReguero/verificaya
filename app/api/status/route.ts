@@ -11,7 +11,7 @@ export async function GET() {
             ocr: {
                 provider: 'openrouter',
                 configured: isOpenRouterConfigured(),
-                model: 'qwen/qwen2.5-vl-32b-instruct:free'
+                model: 'google/gemini-2.0-flash-exp:free'
             },
             database: {
                 status: 'mocked' // Currently mocked

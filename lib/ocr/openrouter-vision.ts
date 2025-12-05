@@ -56,28 +56,28 @@ export async function analyzeDocumentWithOpenRouter(
 ${extractedText ? 'Analyze the following text extracted from a PDF payslip' : 'Carefully examine this payslip image'} and extract ALL visible information.
 
 CRITICAL INSTRUCTIONS:
-- Extract EXACTLY what you see, do not invent or assume data
-- For monetary amounts, extract ONLY the number (no € symbol, no text)
-- For dates, use DD/MM/YYYY format
-- If a field is not visible or unclear, use null
-- Return ONLY valid JSON, no markdown, no explanations
+- Extract EXACTLY what you see, do not invent or assume data.
+- For monetary amounts, extract ONLY the number (no € symbol, no text). Use a dot (.) for decimals.
+- For dates, use DD/MM/YYYY format.
+- If a field is not visible or unclear, use null.
+- Return ONLY valid JSON, no markdown, no explanations.
 
 REQUIRED FIELDS:
 {
   "type": "PAYSLIP",
   "employerName": "Company name as shown on document",
   "employeeName": "Full employee name",
-  "netIncome": 1234.56,  // LÍQUIDO A PERCIBIR - net amount to receive (number only)
-  "grossIncome": 2000.00,  // TOTAL DEVENGADO - gross total earned (number only)
-  "period": "Month YYYY",  // e.g., "Enero 2024" or "01/2024"
-  "seniorityDate": "DD/MM/YYYY"  // ANTIGÜEDAD - employee start date, or null
+  "netIncome": 1234.56,  // LÍQUIDO A PERCIBIR, LÍQUIDO TOTAL, or similar. The final amount to receive.
+  "grossIncome": 2000.00,  // TOTAL DEVENGADO, TOTAL BRUTO. The total earned before deductions.
+  "period": "Month YYYY",  // e.g., "Enero 2024", "01/2024". The period covered by the payslip.
+  "seniorityDate": "DD/MM/YYYY"  // ANTIGÜEDAD, FECHA DE ALTA. Employee start date.
 }
 
-IMPORTANT: 
-- Look for "LÍQUIDO A PERCIBIR" or "LÍQUIDO TOTAL" for netIncome
-- Look for "TOTAL DEVENGADO" or "TOTAL BRUTO" for grossIncome
-- Look for "ANTIGÜEDAD" or "FECHA DE ALTA" for seniorityDate
-- Extract numbers without currency symbols or formatting
+IMPORTANT TIPS:
+- "LÍQUIDO A PERCIBIR" is the most important field for netIncome.
+- "TOTAL DEVENGADO" is the most important field for grossIncome.
+- Ensure numbers are parsed correctly (e.g. 1.234,56 should be 1234.56).
+- If multiple dates appear, look for "Antigüedad" for seniority.
 
 Return the JSON now:`;
                 break;
@@ -88,29 +88,29 @@ Return the JSON now:`;
 ${extractedText ? 'Analyze the following text extracted from a PDF contract' : 'Carefully examine this contract image'} and extract ALL visible information.
 
 CRITICAL INSTRUCTIONS:
-- Extract EXACTLY what you see, do not invent or assume data
-- For monetary amounts, extract ONLY the number (no € symbol)
-- For dates, use DD/MM/YYYY format
-- If a field is not visible or unclear, use null
-- Return ONLY valid JSON, no markdown, no explanations
+- Extract EXACTLY what you see, do not invent or assume data.
+- For monetary amounts, extract ONLY the number (no € symbol). Use a dot (.) for decimals.
+- For dates, use DD/MM/YYYY format.
+- If a field is not visible or unclear, use null.
+- Return ONLY valid JSON, no markdown, no explanations.
 
 REQUIRED FIELDS:
 {
   "type": "CONTRACT",
-  "landlordName": "Arrendador full name",
-  "tenantName": "Arrendatario full name",
+  "landlordName": "Arrendador full name (person or company)",
+  "tenantName": "Arrendatario full name (person or company)",
   "propertyAddress": "Complete address of the rented property",
-  "monthlyRent": 850.00,  // Monthly rent amount (number only, no € symbol)
-  "startDate": "DD/MM/YYYY",  // Contract start date
-  "duration": "Duration text"  // e.g., "1 año", "indefinido", etc.
+  "monthlyRent": 850.00,  // Monthly rent amount (number only).
+  "startDate": "DD/MM/YYYY",  // Contract start date.
+  "duration": "Duration text"  // e.g., "1 año", "indefinido", "5 años".
 }
 
-IMPORTANT:
-- Look for "ARRENDADOR" or "PROPIETARIO" for landlord name
-- Look for "ARRENDATARIO" or "INQUILINO" for tenant name
-- Look for "RENTA MENSUAL", "PRECIO", or "CANTIDAD" for monthly rent
-- Look for "FECHA DE INICIO", "COMIENZO", or "VIGENCIA" for start date
-- Look for "DURACIÓN", "PLAZO", or "TIEMPO" for duration
+IMPORTANT TIPS:
+- Look for "Reunidos" or "Intervienen" sections to find names.
+- "ARRENDADOR" is the owner/landlord.
+- "ARRENDATARIO" is the tenant.
+- "RENTA" or "PRECIO" usually indicates the monthly rent.
+- "DURACIÓN" or "ESTIPULACIONES" section contains the start date and duration.
 
 Return the JSON now:`;
                 break;
@@ -122,34 +122,30 @@ Return the JSON now:`;
 ${extractedText ? 'Analyze the following text extracted from a PDF identity document' : 'Carefully examine this identity document image'} and extract ALL visible information.
 
 CRITICAL INSTRUCTIONS:
-- Extract EXACTLY what you see, do not invent or assume data
-- For dates, use DD/MM/YYYY format exactly as shown
-- Document numbers must be EXACT (including letters)
-- If a field is not visible or unclear, use null
-- Return ONLY valid JSON, no markdown, no explanations
+- Extract EXACTLY what you see, do not invent or assume data.
+- For dates, use DD/MM/YYYY format exactly as shown.
+- Document numbers must be EXACT (including letters).
+- If a field is not visible or unclear, use null.
+- Return ONLY valid JSON, no markdown, no explanations.
 
 REQUIRED FIELDS:
 {
-  "type": "DNI" | "NIE" | "Pasaporte",  // Identify document type
-  "documentNumber": "12345678A",  // EXACT ID number with letter
-  "name": "First name(s)",
-  "surname": "Surname(s) / Apellidos",
-  "fullName": "Complete name",
+  "type": "DNI" | "NIE" | "Pasaporte",  // Identify document type based on visual cues.
+  "documentNumber": "12345678A",  // EXACT ID number with letter.
+  "name": "First name(s) only",
+  "surname": "Surname(s) / Apellidos only",
+  "fullName": "Complete name (Name + Surnames)",
   "birthDate": "DD/MM/YYYY",  // Fecha de nacimiento
   "expiryDate": "DD/MM/YYYY",  // Fecha de caducidad / Válido hasta
-  "nationality": "ESP" | "Country",  // Nacionalidad
+  "nationality": "ESP" | "Country Code",  // Nacionalidad (3 letter code if possible)
   "sex": "M" | "F"  // Sexo
 }
 
-IMPORTANT:
-- DNI format: 8 digits + 1 letter (e.g., 12345678A)
-- NIE format: Letter + 7 digits + letter (e.g., X1234567B)
-- Look for "APELLIDOS" for surnames
-- Look for "NOMBRE" for first names
-- Look for "NACIMIENTO" or "NAC" for birth date
-- Look for "CADUCIDAD", "VÁLIDO HASTA", or "EXPIRY" for expiry date
-- Look for "NACIONALIDAD" or "NAT" for nationality
-- Look for "SEXO" or "SEX" for gender
+IMPORTANT TIPS:
+- DNI usually has "DOCUMENTO NACIONAL DE IDENTIDAD" header.
+- NIE usually starts with X, Y, or Z.
+- Passports are usually dark red/burgundy booklets.
+- Ensure the document number is transcribed with high precision.
 
 Return the JSON now:`;
                 break;

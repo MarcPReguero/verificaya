@@ -8,8 +8,8 @@
 import { useState, useRef } from 'react';
 
 interface ParsedDocument {
-  type: 'DNI' | 'NIE' | 'Pasaporte' | 'Unknown';
-  documentNumber: string;
+  type: 'DNI' | 'NIE' | 'Pasaporte' | 'Unknown' | 'PAYSLIP' | 'CONTRACT';
+  documentNumber?: string;
   name?: string;
   surname?: string;
   fullName?: string;
@@ -17,14 +17,35 @@ interface ParsedDocument {
   expiryDate?: string;
   nationality?: string;
   sex?: string;
+  // Payslip fields
+  netIncome?: number;
+  grossIncome?: number;
+  employerName?: string;
+  employeeName?: string;
+  period?: string;
+  seniorityDate?: string;
+  // Contract fields
+  landlordName?: string;
+  tenantName?: string;
+  propertyAddress?: string;
+  monthlyRent?: number;
+  startDate?: string;
+  duration?: string;
 }
 
 interface DocumentUploadProps {
   onDataExtracted: (data: ParsedDocument) => void;
   onError?: (error: string) => void;
+  documentType?: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT';
+  useLocalOCR?: boolean;
 }
 
-export default function DocumentUpload({ onDataExtracted, onError }: DocumentUploadProps) {
+export default function DocumentUpload({
+  onDataExtracted,
+  onError,
+  documentType = 'IDENTITY',
+  useLocalOCR = false
+}: DocumentUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -71,6 +92,8 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
       // Create form data
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('documentType', documentType);
+      formData.append('useLocalOCR', useLocalOCR.toString());
 
       // Call OCR API
       setProgress('Analizando documento con OCR...');
@@ -146,9 +169,8 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
         />
         <label
           htmlFor="document-upload"
-          className={`cursor-pointer flex flex-col items-center ${
-            uploading ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className={`cursor-pointer flex flex-col items-center ${uploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         >
           {!preview ? (
             <>

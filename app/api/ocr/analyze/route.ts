@@ -96,6 +96,10 @@ export async function POST(request: NextRequest) {
 
     if (!ocrResult.success) {
       console.error(`[OCR API] OCR failed: ${ocrResult.error}`);
+      // Log raw text if available for debugging
+      if (ocrResult.text) {
+        console.error(`[OCR API] Raw text from failed attempt: ${ocrResult.text.substring(0, 500)}...`);
+      }
       return NextResponse.json(
         {
           error: 'OCR analysis failed',
