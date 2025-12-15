@@ -7,7 +7,7 @@ import { TenantScreening } from '@/types';
 // Check if Supabase is configured
 const isSupabaseConfigured = () => {
   return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && 
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_URL !== 'your_supabase_url' &&
     process.env.SUPABASE_SERVICE_ROLE_KEY &&
     process.env.SUPABASE_SERVICE_ROLE_KEY !== 'your_service_role_key'
@@ -24,7 +24,7 @@ export async function POST(
     // Check if Supabase is configured
     if (!isSupabaseConfigured()) {
       console.warn('⚠️ Supabase not configured - returning mock processing result');
-      
+
       // Return mock processing result for demo
       return NextResponse.json({
         success: true,
@@ -143,10 +143,42 @@ export async function POST(
       );
     }
 
+    // Get landlord details for email
+    const { data: landlordData } = await supabase
+      .from('landlords')
+      .select('email, name')
+      .eq('id', screening.landlord_id)
+      .single();
+
+    // Send email notification
+    if (landlordData?.email) {
+      try {
+        const { sendEmail } = await import('@/lib/email');
+        const ScreeningCompletedEmail = (await import('@/components/emails/ScreeningCompletedEmail')).default;
+
+        await sendEmail({
+          to: landlordData.email,
+          subject: `✅ Verificación completada: ${screening.tenant_name}`,
+          react: ScreeningCompletedEmail({
+            landlordName: landlordData.name,
+            tenantName: screening.tenant_name,
+            score: result.score,
+            reportUrl: urlData.publicUrl,
+            documentId: screening.id.substring(0, 8).toUpperCase(),
+          }),
+        });
+        console.log('📧 Email notification sent to:', landlordData.email);
+      } catch (emailError) {
+        console.error('⚠️ Failed to send email notification:', emailError);
+        // Don't fail the request if email fails, just log it
+      }
+    }
+
     return NextResponse.json({
       success: true,
       result,
       reportUrl: urlData.publicUrl,
+      emailSent: !!landlordData?.email
     });
   } catch (error) {
     console.error('Process error:', error);

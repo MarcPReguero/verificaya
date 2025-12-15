@@ -6,12 +6,15 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
+    "lint": "eslint .",
     "verify-setup": "node scripts/verify-setup.js",
     "setup": "node scripts/verify-setup.js"
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.3",
     "@hookform/resolvers": "^5.2.2",
+    "@react-email/components": "^1.0.1",
+    "@react-email/render": "^2.0.0",
     "@stripe/stripe-js": "^8.0.0",
     "@supabase/supabase-js": "^2.75.0",
     "canvas": "^3.2.0",
@@ -26,6 +29,7 @@
     "react-dom": "19.1.0",
     "react-hook-form": "^7.65.0",
     "react-markdown": "^10.1.0",
+    "resend": "^6.6.0",
     "sharp": "^0.34.4",
     "stripe": "^19.1.0",
     "typescript": "^5",
@@ -33,11 +37,14 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.3",
     "@netlify/plugin-nextjs": "^5.13.5",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^16.0.10",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
