@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add app/api/screenings/[id]/process/route.ts app/dashboard/page.tsx)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfix: Remove demo logic from PDF generation and add download\n\n- Remove demo flag detection from screening processing\n- Always generate production PDFs (not demo)\n- Add report_url field to dashboard screening display\n- Update \"Ver Informe\" button to download PDF when available\n- Show \"Generando...\" state when PDF is being created\n- Open PDF in new tab for better UX\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(node scripts/create-storage-bucket.js)",
+      "Bash(node scripts/make-bucket-public.js)",
+      "Bash(git add scripts/create-storage-bucket.js scripts/make-bucket-public.js)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Add Supabase Storage setup scripts for PDF reports\n\n- Add script to create ''reports'' bucket\n- Add script to make bucket public\n- Configure bucket with 10MB limit and PDF-only uploads\n- Bucket is now ready for PDF report storage\n\nBucket successfully configured and tested.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git rev-parse HEAD)",
+      "Bash(git rev-parse origin/master)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

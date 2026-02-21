@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { signUp } from '@/lib/auth';
 
@@ -14,7 +13,6 @@ export default function SignupPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +32,7 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const { user, error: signUpError } = await signUp(
+    const { error: signUpError } = await signUp(
       formData.email,
       formData.password,
       formData.name

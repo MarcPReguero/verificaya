@@ -7,7 +7,7 @@
 - [x] **Landing Page**
   - Hero section with value proposition
   - 6 feature cards with icons
-  - Pricing comparison (Basic €49 / Complete €89)
+- Pricing comparison (Basic €59 / Complete €99)
   - Responsive design (mobile-friendly)
   - Spanish language interface
   - Call-to-action buttons
@@ -24,7 +24,11 @@
 
 - [x] **Dashboard** (`/dashboard`)
   - Statistics overview (total, completed, processing, pending)
-  - Screenings table with filters
+  - Extended metrics (completion rate, average score, high-risk count, rejected/failed)
+  - Screenings table with search filters
+  - Sorting by fecha, inquilino, propiedad, estado, riesgo y puntuación
+  - Pagination (8 items per page)
+  - CSV export of current filtered view
   - Status badges with color coding
   - Score display
   - Report download links
@@ -54,7 +58,7 @@
 
 - [x] **Payment API** (`/api/create-checkout`)
   - Create Stripe checkout session
-  - Handle package pricing (€49/€89)
+  - Handle package pricing (€59/€99)
   - Metadata tracking
   - Success/cancel URLs
 
@@ -244,7 +248,7 @@
   - Monthly statistics
   - Conversion rates
   - Revenue tracking
-  - Export to Excel/CSV
+  - Export to Excel (CSV available)
 
 - [ ] **Landlord Profile Management**
   - Company information
@@ -344,8 +348,8 @@
 
 | Package | Price | Features |
 |---------|-------|----------|
-| **Basic** | €49 | Identity + Income + References + PDF |
-| **Complete** | €89 | All above + Credit Check + Background + Priority |
+| **Basic** | €59 | Identity + Income + References + PDF |
+| **Complete** | €99 | All above + Credit Check + Background + Priority |
 
 ### Future Packages (Ideas)
 
@@ -372,7 +376,7 @@
 
 1. **Landlord** visits site and starts screening
 2. **Form** collected tenant and property information
-3. **Payment** processed via Stripe (€49 or €89)
+3. **Payment** processed via Stripe (€59 or €99)
 4. **Webhook** confirms payment and updates status
 5. **Processing** calculates score using algorithm
 6. **Report** generates branded PDF

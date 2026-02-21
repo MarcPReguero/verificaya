@@ -16,7 +16,7 @@ TenantScreen is a comprehensive SaaS platform that helps landlords and property 
 - **Credit Checks**: Financial background verification (simulated in MVP)
 - **Reference Verification**: Employment and previous landlord references
 - **PDF Reports**: Professional, branded screening reports
-- **Secure Payments**: Stripe-powered checkout (€49 Basic / €89 Complete)
+- **Secure Payments**: Stripe-powered checkout (€59 Basic / €99 Complete)
 
 ## � Quick Start
 
@@ -83,7 +83,7 @@ Follow **[QUICKSTART.md](QUICKSTART.md)** for step-by-step instructions includin
 - Automated tenant scoring (0-100 scale)
 - Professional PDF reports
 - Secure document storage
-- Payment per screening (no subscription)
+- Payment per screening and monthly subscriptions
 - Dashboard to track all screenings
 
 ### 🏠 For Property Managers  
@@ -125,10 +125,10 @@ Run the schema in Supabase SQL Editor to set up your database.
 
 | Package | Price | What's Included |
 |---------|-------|-----------------|
-| **Basic** | €49 | Identity + Income + References + PDF Report |
-| **Complete** | €89 | All above + Credit Check + Background Verification + Priority Support |
+| **Basic** | €59 | Identity + Income + References + PDF Report |
+| **Complete** | €99 | All above + Credit Check + Background Verification + Priority Support |
 
-Pay-per-use model. No subscriptions. No hidden fees.
+Pay-per-use and subscription options available. No hidden fees.
 
 ## 🛠️ Tech Stack Details
 

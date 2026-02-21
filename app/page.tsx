@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 
 export default function Home() {
   const [pricingMode, setPricingMode] = useState<'subscription' | 'payperuse'>('payperuse');
@@ -96,7 +95,7 @@ export default function Home() {
           <p className="text-base sm:text-lg text-gray-600 mb-8 max-w-3xl mx-auto">
             Servicio adaptado a la normativa española (LAU) · 
             Verificación de NIE/DNI · 
-            Informes completos desde <span className="font-bold text-blue-700">€49</span> · 
+            Informes completos desde <span className="font-bold text-blue-700">€59</span> · 
             Resultados en 24 horas
           </p>
 
@@ -132,9 +131,8 @@ export default function Home() {
           </div>
 
           <p className="text-xs sm:text-sm text-gray-600">
-            💳 Primera verificación: <span className="line-through">€69</span> 
-            <span className="text-lg sm:text-xl font-bold text-green-600 mx-1 sm:mx-2">€49</span>
-            <span className="text-blue-700 font-semibold">(Oferta de lanzamiento)</span>
+            💳 Primera verificación: <span className="text-lg sm:text-xl font-bold text-green-600 mx-1 sm:mx-2">€59</span>
+            <span className="text-blue-700 font-semibold">Sin permanencia</span>
           </p>
         </div>
 
@@ -161,7 +159,7 @@ export default function Home() {
               quote="Alquilé mi piso sin verificar los ingresos del inquilino. A partir del tercer mes dejó de pagar. El proceso legal duró 18 meses y perdí cerca de 12.000€ entre impagos y costes legales."
               author="María G., Propietaria en Gràcia"
               warning="Sin verificar ASNEF ni solvencia"
-              color="blue"
+
             />
             <TestimonialCard
               imageUrl="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=400&fit=crop"
@@ -170,7 +168,7 @@ export default function Home() {
               quote="Heredé el piso de mi padre con un inquilino que llevaba 2 años sin pagar. Mi padre había alquilado sin verificar ni hacer contrato formal. Ahora llevo 16 meses en juzgados pagando la hipoteca de mi bolsillo."
               author="Carlos M., Propietario en Chamberí"
               warning="Sin contrato LAU ni verificación"
-              color="blue"
+
             />
             <TestimonialCard
               imageUrl="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&h=400&fit=crop"
@@ -179,7 +177,7 @@ export default function Home() {
               quote="Alquilé a quien parecía una familia responsable. Descubrí 6 meses después que lo subarrendaban por Airbnb. 8 meses de batalla legal, 15.000€ en daños, y problemas graves con la comunidad de vecinos."
               author="Jordi P., Propietario en Ruzafa"
               warning="Sin verificar referencias ni visitas"
-              color="blue"
+
             />
           </div>
 
@@ -189,7 +187,7 @@ export default function Home() {
                 💡 Estos problemas se pueden prevenir con una verificación profesional
               </p>
               <p className="text-gray-900 font-bold text-lg sm:text-xl">
-                Invierte €49 hoy para proteger un patrimonio de miles de euros
+                Invierte €59 hoy para proteger un patrimonio de miles de euros
               </p>
             </div>
             <Link 
@@ -273,10 +271,10 @@ export default function Home() {
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 bg-green-100 text-green-800 px-6 py-2 rounded-full mb-6 border border-green-300">
               <span className="text-lg">💳</span>
-              <span className="font-bold">Oferta de lanzamiento - Ahorra hasta €30</span>
+            <span className="font-bold">Precios transparentes · Sin permanencia</span>
             </div>
             <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Protege tu patrimonio desde €49
+              Protege tu patrimonio desde €59
             </h2>
             <p className="text-lg sm:text-xl text-gray-700">
               Elige el plan que mejor se adapte a tus necesidades
@@ -311,10 +309,8 @@ export default function Home() {
             <div className="grid md:grid-cols-2 gap-6 sm:gap-8 max-w-4xl mx-auto">
               <PricingCard
                 name="Verificación Básica"
-                originalPrice="€69"
-                price="€49"
+                price="€59"
                 badge="Más popular"
-                savings="Ahorra €20"
                 description="Perfecta para propietarios ocasionales"
                 features={[
                   'Consulta ASNEF completa',
@@ -329,10 +325,8 @@ export default function Home() {
               />
               <PricingCard
                 name="Verificación Premium"
-                originalPrice="€149"
                 price="€99"
                 badge="Recomendado"
-                savings="Ahorra €50"
                 description="Para propietarios profesionales"
                 features={[
                   'Todo lo de Básica',
@@ -351,9 +345,9 @@ export default function Home() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 max-w-6xl mx-auto">
               <SubscriptionCard
                 name="Starter"
-                price="€89"
+                price="€49"
                 period="/mes"
-                savingsPercent="Ahorra 20%"
+                savingsPercent="Ahorra €148/mes"
                 description="Hasta 3 verificaciones/mes"
                 features={[
                   '3 verificaciones completas',
@@ -368,10 +362,10 @@ export default function Home() {
               />
               <SubscriptionCard
                 name="Professional"
-                price="€199"
+                price="€129"
                 period="/mes"
                 badge="Más vendido"
-                savingsPercent="Ahorra 35%"
+                savingsPercent="Ahorra €861/mes"
                 description="Hasta 10 verificaciones/mes"
                 features={[
                   '10 verificaciones completas',
@@ -387,9 +381,9 @@ export default function Home() {
               />
               <SubscriptionCard
                 name="Enterprise"
-                price="€449"
+                price="€299"
                 period="/mes"
-                savingsPercent="Ahorra 45%"
+                savingsPercent="Ahorra €2,671/mes"
                 description="Verificaciones ilimitadas"
                 features={[
                   'Verificaciones ILIMITADAS',
@@ -463,7 +457,7 @@ export default function Home() {
             Empezar verificación ahora
           </Link>
           <p className="mt-6 text-sm opacity-75">
-            💳 Primera verificación desde €49 · ✓ Sin permanencia · ⚡ Resultados en 24h
+            💳 Primera verificación desde €59 · ✓ Sin permanencia · ⚡ Resultados en 24h
           </p>
         </div>
 
@@ -506,10 +500,9 @@ interface TestimonialCardProps {
   quote: string;
   author: string;
   warning: string;
-  color: string;
 }
 
-function TestimonialCard({ imageUrl, city, title, quote, author, warning, color }: TestimonialCardProps) {
+function TestimonialCard({ imageUrl, city, title, quote, author, warning }: TestimonialCardProps) {
   return (
     <div className="bg-white rounded-xl p-6 shadow-lg border border-gray-200 hover:shadow-xl transition">
       <div className="flex items-start gap-4 mb-4">

@@ -8,8 +8,8 @@
 import { useState, useRef } from 'react';
 
 interface ParsedDocument {
-  type: 'DNI' | 'NIE' | 'Pasaporte' | 'Unknown';
-  documentNumber: string;
+  type: 'DNI' | 'NIE' | 'Pasaporte' | 'PASSPORT' | 'Unknown' | 'PAYSLIP' | 'CONTRACT';
+  documentNumber?: string;
   name?: string;
   surname?: string;
   fullName?: string;
@@ -17,29 +17,85 @@ interface ParsedDocument {
   expiryDate?: string;
   nationality?: string;
   sex?: string;
+  // Payslip fields
+  netIncome?: number;
+  grossIncome?: number;
+  employerName?: string;
+  employeeName?: string;
+  period?: string;
+  seniorityDate?: string;
+  // Contract fields
+  landlordName?: string;
+  tenantName?: string;
+  propertyAddress?: string;
+  monthlyRent?: number;
+  startDate?: string;
+  duration?: string;
+}
+
+interface OcrMetadata {
+  confidence?: number;
+  fileName?: string;
+  fileSize?: number;
+  model?: string;
+  documentType?: string;
+}
+
+interface OcrValidation {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+interface OcrAnalyzeResponse {
+  success: boolean;
+  document: ParsedDocument;
+  validation?: OcrValidation;
+  metadata?: OcrMetadata;
+  demoMode?: boolean;
+  error?: string;
+  message?: string;
 }
 
 interface DocumentUploadProps {
   onDataExtracted: (data: ParsedDocument) => void;
   onError?: (error: string) => void;
+  documentType?: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT';
+  useLocalOCR?: boolean;
+  onFileSelected?: (file: File) => void;
 }
 
-export default function DocumentUpload({ onDataExtracted, onError }: DocumentUploadProps) {
+export default function DocumentUpload({
+  onDataExtracted,
+  onError,
+  documentType = 'IDENTITY',
+  useLocalOCR = false,
+  onFileSelected
+}: DocumentUploadProps) {
   const [uploading, setUploading] = useState(false);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [preview, setPreview] = useState('');
   const [fileName, setFileName] = useState<string>('');
+  const [fileType, setFileType] = useState<string>('');
   const [progress, setProgress] = useState<string>('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<OcrAnalyzeResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputId = `document-upload-${documentType.toLowerCase()}`;
+
+  const normalizeDocumentType = (type: ParsedDocument['type']): ParsedDocument['type'] => {
+    if (type === 'Pasaporte' || type.toUpperCase() === 'PASAPORTE' || type === 'PASSPORT') {
+      return 'PASSPORT';
+    }
+    return type;
+  };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
-      onError?.('Tipo de archivo inválido. Por favor sube una imagen (JPG, PNG, WEBP)');
+      onError?.('Tipo de archivo inválido. Sube JPG, PNG, WEBP o PDF (máximo 10MB).');
       return;
     }
 
@@ -51,13 +107,19 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
     }
 
     setFileName(file.name);
+    setFileType(file.type);
+    onFileSelected?.(file);
 
-    // Create preview
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    if (file.type === 'application/pdf') {
+      setPreview('');
+    } else {
+      // Create preview
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
 
     // Upload and analyze
     await analyzeDocument(file);
@@ -71,6 +133,8 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
       // Create form data
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('documentType', documentType);
+      formData.append('useLocalOCR', useLocalOCR.toString());
 
       // Call OCR API
       setProgress('Analizando documento con OCR...');
@@ -79,7 +143,7 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
         body: formData,
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as OcrAnalyzeResponse;
 
       if (!response.ok) {
         if (data.demoMode) {
@@ -95,11 +159,20 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
       }
 
       setProgress('Datos extraídos correctamente ✅');
-      setResult(data);
+      const normalizedDocument = {
+        ...data.document,
+        type: normalizeDocumentType(data.document.type),
+      };
+      const normalizedResult = {
+        ...data,
+        document: normalizedDocument,
+      };
+
+      setResult(normalizedResult);
 
       // Notify parent with extracted data
       if (data.success) {
-        onDataExtracted(data.document);
+        onDataExtracted(normalizedDocument);
       }
 
       // Show validation errors/warnings
@@ -113,17 +186,18 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
         }
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('OCR Error:', error);
-      onError?.(error.message || 'Error al procesar el documento');
+      onError?.(error instanceof Error ? error.message : 'Error al procesar el documento');
     } finally {
       setUploading(false);
     }
   };
 
   const handleClear = () => {
-    setPreview(null);
+    setPreview('');
     setFileName('');
+    setFileType('');
     setProgress('');
     setResult(null);
     if (fileInputRef.current) {
@@ -138,19 +212,18 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/jpg,image/png,image/webp"
+          accept="image/jpeg,image/jpg,image/png,image/webp,application/pdf"
           onChange={handleFileSelect}
           disabled={uploading}
           className="hidden"
-          id="document-upload"
+          id={inputId}
         />
         <label
-          htmlFor="document-upload"
-          className={`cursor-pointer flex flex-col items-center ${
-            uploading ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          htmlFor={inputId}
+          className={`cursor-pointer flex flex-col items-center ${uploading ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         >
-          {!preview ? (
+          {!preview && fileType !== 'application/pdf' ? (
             <>
               <svg
                 className="w-12 h-12 text-gray-400 mb-2"
@@ -172,7 +245,17 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
                 {' '}o arrastra tu documento aquí
               </p>
               <p className="text-xs text-gray-500">
-                DNI, NIE o Pasaporte (JPG, PNG, WEBP - máx. 10MB)
+                DNI, NIE o Pasaporte (JPG, PNG, WEBP, PDF - máx. 10MB)
+              </p>
+            </>
+          ) : fileType === 'application/pdf' ? (
+            <>
+              <span className="text-5xl mb-2">ðŸ“„</span>
+              <p className="text-sm text-gray-600 mb-1">
+                <span className="font-semibold text-blue-600">PDF listo para procesar</span>
+              </p>
+              <p className="text-xs text-gray-500">
+                El documento PDF se enviarÃ¡ a OCR para anÃ¡lisis
               </p>
             </>
           ) : (
@@ -252,7 +335,7 @@ export default function DocumentUpload({ onDataExtracted, onError }: DocumentUpl
                 {result.document.fullName && (
                   <p>• Nombre: <strong>{result.document.fullName}</strong></p>
                 )}
-                {result.metadata.confidence && (
+                {result.metadata?.confidence && (
                   <p>
                     • Confianza:{' '}
                     <strong>{(result.metadata.confidence * 100).toFixed(0)}%</strong>

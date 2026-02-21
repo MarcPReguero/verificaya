@@ -46,7 +46,7 @@ https://images.unsplash.com/photo-1500648767791-00dcc994a43e (Jordi)
 ✓ Badge verde: "Más de 3.200 propietarios confían en VerificaYa"
 ✓ Headline: "Verifica a tus inquilinos de forma profesional y segura"
 ✓ Subheadline: "Consulta ASNEF, verifica ingresos y comprueba referencias en minutos"
-✓ Descripción: Servicio adaptado LAU · NIE/DNI · Desde €49 · Resultados 24h
+✓ Descripción: Servicio adaptado LAU · NIE/DNI · Desde €59 · Resultados 24h
 ✓ Stats: 47% (INE) · 12-18m desahucio · €6.200 coste medio
 ✓ CTAs: "Iniciar Verificación" (azul) + "Ver Casos de Uso" (blanco)
 ```
@@ -85,13 +85,13 @@ https://images.unsplash.com/photo-1500648767791-00dcc994a43e (Jordi)
 ### Precios Actualizados
 ```
 Pago por uso:
-- Básica: €69 → €49 (Ahorra €20)
-- Premium: €149 → €99 (Ahorra €50)
+- Básica: €59
+- Premium: €99
 
 Suscripción:
-- Starter: €89/mes (3 verificaciones)
-- Professional: €199/mes (10 verificaciones) [Más vendido]
-- Enterprise: €449/mes (Ilimitadas)
+- Starter: €49/mes (3 verificaciones)
+- Professional: €129/mes (10 verificaciones) [Más vendido]
+- Enterprise: €299/mes (Ilimitadas)
 ```
 
 ### FAQ Específico España

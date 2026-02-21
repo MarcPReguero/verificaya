@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS landlords (
 CREATE TABLE IF NOT EXISTS screenings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   landlord_id UUID REFERENCES landlords(id) ON DELETE CASCADE,
+  landlord_email TEXT,
   tenant_name TEXT NOT NULL,
   tenant_email TEXT NOT NULL,
   tenant_phone TEXT,
@@ -27,10 +28,22 @@ CREATE TABLE IF NOT EXISTS screenings (
   document_number TEXT NOT NULL,
   monthly_income NUMERIC NOT NULL,
   employment_status TEXT NOT NULL CHECK (employment_status IN ('employed', 'self-employed', 'student', 'unemployed')),
+  employment_years NUMERIC,
+  contract_type TEXT,
+  employer_name TEXT,
+  -- Store references as JSON array with name, phone, email, relationship, verified fields
+  references JSONB,
+  previous_address TEXT,
+  previous_landlord_name TEXT,
+  previous_landlord_phone TEXT,
   property_address TEXT NOT NULL,
   monthly_rent NUMERIC NOT NULL,
   package_type TEXT NOT NULL CHECK (package_type IN ('basic', 'complete')),
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'rejected')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'rejected', 'failed')),
+  risk_level TEXT CHECK (risk_level IN ('low', 'medium', 'high', 'very_high')),
+  fraud_flags JSONB,
+  explanation JSONB,
+  human_review_available BOOLEAN DEFAULT TRUE,
   score INTEGER CHECK (score >= 0 AND score <= 100),
   -- 🆕 ASNEF Credit Check fields
   credit_score INTEGER CHECK (credit_score >= 0 AND credit_score <= 1000),
@@ -44,6 +57,20 @@ CREATE TABLE IF NOT EXISTS screenings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Migration-safe additions for environments created before these fields were added
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS landlord_email TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS employment_years NUMERIC;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS contract_type TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS employer_name TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS references JSONB;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS previous_address TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS previous_landlord_name TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS previous_landlord_phone TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS risk_level TEXT;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS fraud_flags JSONB;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS explanation JSONB;
+ALTER TABLE screenings ADD COLUMN IF NOT EXISTS human_review_available BOOLEAN;
+
 -- Screening documents table
 CREATE TABLE IF NOT EXISTS screening_documents (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -55,6 +82,7 @@ CREATE TABLE IF NOT EXISTS screening_documents (
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_landlords_email ON landlords(email);
+CREATE INDEX IF NOT EXISTS idx_screenings_landlord_email ON screenings(landlord_email);
 CREATE INDEX IF NOT EXISTS idx_screenings_landlord_id ON screenings(landlord_id);
 CREATE INDEX IF NOT EXISTS idx_screenings_status ON screenings(status);
 CREATE INDEX IF NOT EXISTS idx_screenings_created_at ON screenings(created_at DESC);

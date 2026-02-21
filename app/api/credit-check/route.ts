@@ -8,7 +8,7 @@ import { AsnefService } from '@/lib/services/asnef.service';
  * 
  * Body:
  * {
- *   documentType: 'DNI' | 'NIE' | 'Passport',
+ *   documentType: 'DNI' | 'NIE' | 'PASSPORT',
  *   documentNumber: string,
  *   fullName: string,
  *   birthDate?: string
@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
     }
     
     // Validar formato de documento
-    const documentType = body.documentType || 'DNI';
+    const documentType =
+      typeof body.documentType === 'string' && body.documentType.trim().toUpperCase() === 'PASAPORTE'
+        ? 'PASSPORT'
+        : typeof body.documentType === 'string'
+          ? body.documentType.trim().toUpperCase()
+          : 'DNI';
     const documentNumber = body.documentNumber.trim().toUpperCase();
     
     if (!isValidDocument(documentType, documentNumber)) {
@@ -63,13 +68,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(creditResult);
     
   } catch (error) {
-    console.error('❌ Error in credit check:', error);
+    console.error('❌ Error in credit check', error);
     
     return NextResponse.json(
       { 
         success: false, 
         error: 'Error al realizar consulta crediticia',
-        details: error instanceof Error ? error.message : 'Error desconocido',
+        details: 'Error desconocido',
       },
       { status: 500 }
     );
@@ -86,7 +91,8 @@ function isValidDocument(type: string, number: string): boolean {
       // 8 dígitos + letra o X/Y/Z + 7 dígitos + letra
       return /^[0-9XYZ][0-9]{7}[A-Z]$/i.test(number);
     
-    case 'Passport':
+    case 'PASAPORTE':
+    case 'PASSPORT':
       // 3 letras + 6 dígitos (español) o formato internacional
       return /^[A-Z]{3}[0-9]{6}$/i.test(number) || number.length >= 6;
     
@@ -124,6 +130,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(creditResult);
     
   } catch (error) {
+    console.error('❌ Error in GET credit check', error);
     return NextResponse.json(
       { 
         success: false, 
@@ -133,3 +140,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

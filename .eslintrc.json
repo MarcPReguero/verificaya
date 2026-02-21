@@ -1,0 +1,35 @@
+{
+    "parser": "@typescript-eslint/parser",
+    "plugins": [
+        "@typescript-eslint"
+    ],
+    "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/recommended"
+    ],
+    "env": {
+        "browser": true,
+        "node": true,
+        "es2021": true
+    },
+    "ignorePatterns": [
+        ".next",
+        "node_modules",
+        "dist",
+        "*.js",
+        "*.d.ts"
+    ],
+    "rules": {
+        "@typescript-eslint/no-explicit-any": "warn",
+        "@typescript-eslint/no-unused-vars": "warn",
+        "@typescript-eslint/no-require-imports": "off",
+        "@typescript-eslint/ban-ts-comment": "off",
+        "@typescript-eslint/no-empty-object-type": "warn",
+        "@typescript-eslint/no-unsafe-function-type": "warn",
+        "@typescript-eslint/no-wrapper-object-types": "warn",
+        "prefer-const": "warn",
+        "no-undef": "off",
+        "no-var": "warn",
+        "no-empty": "warn"
+    }
+}

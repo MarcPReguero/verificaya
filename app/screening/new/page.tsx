@@ -1,19 +1,50 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/useAuth';
 import DocumentUpload from '@/components/forms/DocumentUpload';
+import { uploadScreeningDocument, type ScreeningDocumentType } from '@/components/forms/FileUpload';
+
+type EmploymentStatus = 'employed' | 'self-employed' | 'student' | 'unemployed';
+type ReferenceType = 'employer' | 'previous_landlord' | 'personal';
+type ContractType = '' | 'indefinido' | 'temporal' | 'autonomo' | 'other';
 
 // Mark this route as dynamic to prevent static generation errors
 export const dynamic = 'force-dynamic';
 
 function NewScreeningContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
+  type PendingDocumentFiles = {
+    identity?: File;
+    payslip?: File;
+    contract?: File;
+  };
+  type PendingOcrContext = {
+    identity?: {
+      type?: 'DNI' | 'NIE' | 'PASSPORT' | 'Unknown' | 'PASAPORTE';
+      documentNumber?: string;
+      fullName?: string;
+      name?: string;
+      surname?: string;
+    };
+    payslip?: {
+      netIncome?: number;
+      grossIncome?: number;
+      employerName?: string;
+      employeeName?: string;
+    };
+    contract?: {
+      landlordName?: string;
+      tenantName?: string;
+      propertyAddress?: string;
+      monthlyRent?: number;
+      startDate?: string;
+      duration?: string;
+    };
+  };
+
+  const [pendingDocuments, setPendingDocuments] = useState<PendingDocumentFiles>({});
+  const [ocrContext, setOcrContext] = useState<PendingOcrContext>({});
   const [formData, setFormData] = useState({
     // Tenant info
     tenantName: '',
@@ -24,12 +55,12 @@ function NewScreeningContent() {
 
     // Employment
     monthlyIncome: '',
-    employmentStatus: 'employed' as const,
-    employmentYears: '',       // NEW
-    contractType: '' as '' | 'indefinido' | 'temporal' | 'autonomo' | 'other', // NEW
-    employerName: '',          // NEW
+    employmentStatus: 'employed' as EmploymentStatus,
+    employmentYears: '',
+    contractType: '' as '' | 'indefinido' | 'temporal' | 'autonomo' | 'other',
+    employerName: '',
 
-    // References - NEW
+    // References
     references: [] as Array<{
       type: 'employer' | 'previous_landlord' | 'personal';
       name: string;
@@ -38,7 +69,7 @@ function NewScreeningContent() {
       relationship: string;
     }>,
 
-    // Rental history - NEW
+    // Rental history
     previousAddress: '',
     previousLandlordName: '',
     previousLandlordPhone: '',
@@ -60,6 +91,56 @@ function NewScreeningContent() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [useLocalOCR, setUseLocalOCR] = useState(false);
+
+  const normalizeDocumentType = (documentType: string) => {
+    const upper = documentType.trim().toUpperCase();
+    if (upper === 'PASAPORTE' || upper === 'PASSPORT') {
+      return 'PASSPORT';
+    }
+    if (upper === 'DNI' || upper === 'NIE') {
+      return upper;
+    }
+    return documentType;
+  };
+
+  const toDbDocumentType = (sourceType: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT'): ScreeningDocumentType => {
+    if (sourceType === 'IDENTITY') return 'id-document';
+    if (sourceType === 'PAYSLIP') return 'payslip';
+    return 'employment-contract';
+  };
+
+  const uploadPendingDocuments = async (screeningId: string) => {
+    const documentEntries: Array<{
+      file: File | undefined;
+      sourceType: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT';
+      label: string;
+    }> = [
+      { file: pendingDocuments.identity, sourceType: 'IDENTITY', label: 'Documento de identidad' },
+      { file: pendingDocuments.payslip, sourceType: 'PAYSLIP', label: 'Nómina' },
+      { file: pendingDocuments.contract, sourceType: 'CONTRACT', label: 'Contrato' },
+    ];
+
+    const uploadErrors: string[] = [];
+
+    for (const { file, sourceType, label } of documentEntries) {
+      if (!file) continue;
+
+      try {
+        await uploadScreeningDocument({
+          screeningId,
+          documentType: toDbDocumentType(sourceType),
+          file,
+        });
+      } catch (uploadError) {
+        uploadErrors.push(
+          `${label}: ${(uploadError as Error).message || 'No se pudo subir el archivo'}`
+        );
+      }
+    }
+
+    return uploadErrors;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +148,11 @@ function NewScreeningContent() {
     setError('');
 
     try {
+      const preparedOcrContext = {
+        identity: ocrContext.identity,
+        payslip: ocrContext.payslip,
+        contract: ocrContext.contract,
+      };
       // 1. Create screening
       const response = await fetch('/api/screenings', {
         method: 'POST',
@@ -81,6 +167,7 @@ function NewScreeningContent() {
             ...ref,
             verified: false
           })),
+          ocrContext: preparedOcrContext,
         }),
       });
 
@@ -90,13 +177,25 @@ function NewScreeningContent() {
         throw new Error(data.error || 'Error al crear verificación');
       }
 
-      // 2. Create Stripe checkout session
+      // 2. Upload documents with selected files (best effort)
+      const uploadWarnings = await uploadPendingDocuments(data.screeningId);
+      if (uploadWarnings.length > 0) {
+        setError((prev) =>
+          prev
+            ? `${prev} ${uploadWarnings.join(' | ')}`
+            : `Advertencia: no se pudieron subir algunos documentos (${uploadWarnings.join(' | ')})`
+        );
+      }
+
+      // 3. Create Stripe checkout session
       const checkoutResponse = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           screeningId: data.screeningId,
           packageType: formData.packageType,
+          billingMode: formData.billingMode,
+          subscriptionPlan: formData.subscriptionPlan,
           landlordEmail: formData.landlordEmail,
         }),
       });
@@ -111,8 +210,8 @@ function NewScreeningContent() {
       if (checkoutData.url) {
         window.location.href = checkoutData.url;
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al crear verificación');
       setSubmitting(false);
     }
   };
@@ -131,14 +230,13 @@ function NewScreeningContent() {
 
         {/* Progress Steps */}
         <div className="flex items-center justify-between mb-8">
-          {[1, 2, 3, 4, 5].map((s) => (
+          {[1, 2, 3, 4, 5, 6].map((s) => (
             <div key={s} className="flex items-center">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${
-                step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
-              }`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold text-sm ${step >= s ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'
+                }`}>
                 {s}
               </div>
-              {s < 5 && <div className={`w-16 h-1 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
+              {s < 6 && <div className={`w-8 md:w-16 h-1 ${step > s ? 'bg-blue-600' : 'bg-gray-200'}`} />}
             </div>
           ))}
         </div>
@@ -154,54 +252,163 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 1: Tenant Info */}
+          {/* Step 1: Document Hub (NEW) */}
           {step === 1 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos del Inquilino</h2>
-              
-              {/* OCR Document Upload */}
-              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border-2 border-blue-200">
-                <div className="flex items-start gap-3 mb-4">
-                  <span className="text-2xl">✨</span>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 mb-1">
-                      Auto-completa con tu documento
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Sube una foto de tu DNI, NIE o Pasaporte y llenaremos los campos automáticamente
-                    </p>
-                  </div>
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Sube tus Documentos</h2>
+                <p className="text-gray-600">
+                  Para agilizar el proceso, sube tus documentos ahora y autocompletaremos el formulario por ti.
+                </p>
+
+                {/* OCR Provider Toggle */}
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useLocalOCR}
+                      onChange={(e) => setUseLocalOCR(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                    <span>Usar OCR local (LM Studio)</span>
+                  </label>
                 </div>
-                
+              </div>
+
+              {/* 1. Identity Document (Required-ish) */}
+              <div className="bg-blue-50 rounded-xl p-6 border-2 border-blue-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-2xl">🆔</span>
+                  <h3 className="text-lg font-bold text-gray-900">Documento de Identidad</h3>
+                </div>
                 <DocumentUpload
+                  documentType="IDENTITY"
+                  useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    identity: file,
+                  }))}
                   onDataExtracted={(data) => {
-                    // Auto-complete form fields
-                    setFormData({
-                      ...formData,
-                      documentType: data.type === 'Unknown' ? 'DNI' : data.type,
-                      documentNumber: data.documentNumber || formData.documentNumber,
-                      tenantName: data.fullName || data.name || formData.tenantName,
-                    });
-                    setError(''); // Clear any previous errors
+                    const identityType = data.type === 'PASSPORT' || data.type === 'Pasaporte'
+                      ? 'PASSPORT'
+                      : data.type === 'DNI' || data.type === 'NIE'
+                        ? data.type
+                        : undefined;
+
+                    setFormData(prev => ({
+                      ...prev,
+                      documentType: data.type === 'Unknown' ? 'DNI' : normalizeDocumentType(data.type),
+                      documentNumber: data.documentNumber || prev.documentNumber,
+                      tenantName: data.fullName || data.name || prev.tenantName,
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      identity: {
+                        type: identityType || prev.identity?.type,
+                        documentNumber: data.documentNumber || prev.identity?.documentNumber,
+                        fullName: data.fullName || prev.identity?.fullName,
+                        name: data.name || prev.identity?.name,
+                        surname: data.surname || prev.identity?.surname,
+                      },
+                    }));
+                    setError('');
                   }}
-                  onError={(error) => {
-                    setError(error);
-                  }}
+                  onError={setError}
                 />
               </div>
 
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-300"></div>
+              {/* 2. Payslip (Optional) */}
+              <div className="bg-green-50 rounded-xl p-6 border-2 border-green-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-2xl">📄</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Última Nómina</h3>
+                    <p className="text-xs text-gray-500">Opcional, pero recomendado</p>
+                  </div>
                 </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-white text-gray-500 font-medium">
-                    O ingresa los datos manualmente
-                  </span>
-                </div>
+                <DocumentUpload
+                  documentType="PAYSLIP"
+                  useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    payslip: file,
+                  }))}
+                  onDataExtracted={(data) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      monthlyIncome: data.netIncome ? data.netIncome.toString() : prev.monthlyIncome,
+                      employerName: data.employerName || prev.employerName,
+                      employmentStatus: 'employed',
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      payslip: {
+                        netIncome: data.netIncome,
+                        grossIncome: data.grossIncome,
+                        employerName: data.employerName || prev.payslip?.employerName,
+                        employeeName: data.employeeName || prev.payslip?.employeeName,
+                      },
+                    }));
+                    setError('');
+                  }}
+                  onError={setError}
+                />
               </div>
-              
+
+              {/* 3. Contract (Optional) */}
+              <div className="bg-purple-50 rounded-xl p-6 border-2 border-purple-100">
+                <div className="flex items-center gap-3 mb-4">
+                  <span className="text-2xl">🏠</span>
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">Contrato de Alquiler Anterior</h3>
+                    <p className="text-xs text-gray-500">Opcional, para referencias</p>
+                  </div>
+                </div>
+                <DocumentUpload
+                  documentType="CONTRACT"
+                  useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    contract: file,
+                  }))}
+                  onDataExtracted={(data) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      previousAddress: data.propertyAddress || prev.previousAddress,
+                      previousLandlordName: data.landlordName || prev.previousLandlordName,
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      contract: {
+                        landlordName: data.landlordName || prev.contract?.landlordName,
+                        tenantName: data.tenantName || prev.contract?.tenantName,
+                        propertyAddress: data.propertyAddress || prev.contract?.propertyAddress,
+                        monthlyRent: data.monthlyRent,
+                        startDate: data.startDate || prev.contract?.startDate,
+                        duration: data.duration || prev.contract?.duration,
+                      },
+                    }));
+                    setError('');
+                  }}
+                  onError={setError}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setStep(2)}
+                className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition font-bold text-lg shadow-lg shadow-blue-200"
+              >
+                Continuar al Formulario →
+              </button>
+            </div>
+          )}
+
+          {/* Step 2: Tenant Info (Previously Step 1) */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos Personales</h2>
+
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Nombre Completo *
@@ -210,7 +417,7 @@ function NewScreeningContent() {
                   type="text"
                   required
                   value={formData.tenantName}
-                  onChange={(e) => setFormData({...formData, tenantName: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, tenantName: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                   placeholder="Juan García López"
                 />
@@ -225,7 +432,7 @@ function NewScreeningContent() {
                     type="email"
                     required
                     value={formData.tenantEmail}
-                    onChange={(e) => setFormData({...formData, tenantEmail: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, tenantEmail: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                     placeholder="juan@email.com"
                   />
@@ -238,7 +445,7 @@ function NewScreeningContent() {
                     type="tel"
                     required
                     value={formData.tenantPhone}
-                    onChange={(e) => setFormData({...formData, tenantPhone: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, tenantPhone: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                     placeholder="+34 600 000 000"
                   />
@@ -253,12 +460,12 @@ function NewScreeningContent() {
                   <select
                     required
                     value={formData.documentType}
-                    onChange={(e) => setFormData({...formData, documentType: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, documentType: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
                   >
                     <option value="DNI">DNI</option>
                     <option value="NIE">NIE</option>
-                    <option value="Pasaporte">Pasaporte</option>
+                    <option value="PASSPORT">PASSPORT</option>
                   </select>
                 </div>
                 <div>
@@ -269,143 +476,14 @@ function NewScreeningContent() {
                     type="text"
                     required
                     value={formData.documentNumber}
-                    onChange={(e) => setFormData({...formData, documentNumber: e.target.value.toUpperCase()})}
+                    onChange={(e) => setFormData({ ...formData, documentNumber: e.target.value.toUpperCase() })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                     placeholder={
                       formData.documentType === 'DNI' ? '12345678A' :
-                      formData.documentType === 'NIE' ? 'X1234567A' :
-                      'ABC123456'
+                        formData.documentType === 'NIE' ? 'X1234567A' :
+                          'ABC123456'
                     }
                   />
-                  <p className="mt-1 text-xs text-gray-500">
-                    {formData.documentType === 'DNI' && 'Formato: 8 dígitos + letra'}
-                    {formData.documentType === 'NIE' && 'Formato: X/Y/Z + 7 dígitos + letra'}
-                    {formData.documentType === 'Pasaporte' && 'Formato: 3 letras + 6 dígitos'}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
-              >
-                Siguiente
-              </button>
-            </div>
-          )}
-
-          {/* Step 2: Employment */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Situación Laboral</h2>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Estado Laboral *
-                </label>
-                <select
-                  required
-                  value={formData.employmentStatus}
-                  onChange={(e) => setFormData({...formData, employmentStatus: e.target.value as any})}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
-                >
-                  <option value="employed">Empleado por cuenta ajena</option>
-                  <option value="self-employed">Autónomo</option>
-                  <option value="student">Estudiante</option>
-                  <option value="unemployed">Desempleado</option>
-                </select>
-              </div>
-
-              {/* NEW: Employment Stability Fields */}
-              {(formData.employmentStatus === 'employed' || formData.employmentStatus === 'self-employed') && (
-                <>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Años en el empleo actual *
-                        <span className="ml-2 text-xs text-blue-600 font-normal">
-                          Mejora tu puntuación
-                        </span>
-                      </label>
-                      <input
-                        type="number"
-                        required
-                        min="0"
-                        max="50"
-                        step="0.5"
-                        value={formData.employmentYears}
-                        onChange={(e) => setFormData({...formData, employmentYears: e.target.value})}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                        placeholder="2.5"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        Ejemplo: 2.5 para 2 años y medio
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Tipo de contrato *
-                        <span className="ml-2 text-xs text-blue-600 font-normal">
-                          +5 pts si indefinido
-                        </span>
-                      </label>
-                      <select
-                        required
-                        value={formData.contractType}
-                        onChange={(e) => setFormData({...formData, contractType: e.target.value as any})}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
-                      >
-                        <option value="">Selecciona...</option>
-                        <option value="indefinido">Indefinido</option>
-                        <option value="temporal">Temporal</option>
-                        <option value="autonomo">Autónomo</option>
-                        <option value="other">Otro</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Nombre del empleador (opcional)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.employerName}
-                      onChange={(e) => setFormData({...formData, employerName: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                      placeholder="Empresa XYZ S.L."
-                    />
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Ingresos Mensuales Netos (€) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={formData.monthlyIncome}
-                  onChange={(e) => setFormData({...formData, monthlyIncome: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                  placeholder="2000"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Tus ingresos netos mensuales (después de impuestos)
-                </p>
-              </div>
-
-              {/* Info box about scoring */}
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                <div className="flex items-start gap-2">
-                  <span className="text-blue-600 text-xl">💡</span>
-                  <div className="text-sm text-gray-700">
-                    <strong className="text-blue-900">Tip:</strong> Proporcionar detalles sobre tu estabilidad laboral
-                    puede mejorar tu puntuación hasta en 13 puntos. Un contrato indefinido y 3+ años de antigüedad
-                    son los mejor valorados.
-                  </div>
                 </div>
               </div>
 
@@ -428,200 +506,93 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 3: References & Rental History - NEW! */}
+          {/* Step 3: Employment (Previously Step 2) */}
           {step === 3 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Referencias e Historial</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Situación Laboral</h2>
 
-              {/* Rental History */}
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-6 border-2 border-green-200">
-                <div className="flex items-start gap-2 mb-4">
-                  <span className="text-2xl">🏠</span>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900">Historial de Alquiler</h3>
-                    <p className="text-sm text-gray-600">
-                      Opcional pero recomendado - ayuda a mejorar tu puntuación
-                    </p>
-                  </div>
-                </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Estado Laboral *
+                </label>
+                <select
+                  required
+                  value={formData.employmentStatus}
+                  onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value as EmploymentStatus })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
+                >
+                  <option value="employed">Empleado por cuenta ajena</option>
+                  <option value="self-employed">Autónomo</option>
+                  <option value="student">Estudiante</option>
+                  <option value="unemployed">Desempleado</option>
+                </select>
+              </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Dirección anterior (opcional)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.previousAddress}
-                      onChange={(e) => setFormData({...formData, previousAddress: e.target.value})}
-                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                      placeholder="Calle Example, 45, Barcelona"
-                    />
-                  </div>
-
+              {(formData.employmentStatus === 'employed' || formData.employmentStatus === 'self-employed') && (
+                <>
                   <div className="grid md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Nombre del anterior casero (opcional)
+                        Años en el empleo actual *
                       </label>
                       <input
-                        type="text"
-                        value={formData.previousLandlordName}
-                        onChange={(e) => setFormData({...formData, previousLandlordName: e.target.value})}
+                        type="number"
+                        required
+                        min="0"
+                        max="50"
+                        step="0.5"
+                        value={formData.employmentYears}
+                        onChange={(e) => setFormData({ ...formData, employmentYears: e.target.value })}
                         className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                        placeholder="José Martínez"
+                        placeholder="2.5"
                       />
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-900 mb-2">
-                        Teléfono del casero (opcional)
+                        Tipo de contrato *
                       </label>
-                      <input
-                        type="tel"
-                        value={formData.previousLandlordPhone}
-                        onChange={(e) => setFormData({...formData, previousLandlordPhone: e.target.value})}
-                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                        placeholder="+34 600 000 000"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* References */}
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-6 border-2 border-purple-200">
-                <div className="flex items-start gap-2 mb-4">
-                  <span className="text-2xl">👥</span>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-gray-900">
-                      Referencias
-                      <span className="ml-2 text-xs bg-purple-600 text-white px-2 py-1 rounded-full">
-                        +10 puntos
-                      </span>
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      Proporciona al menos 2 referencias para maximizar tu puntuación
-                    </p>
-                  </div>
-                </div>
-
-                {formData.references.map((ref, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 mb-3 border border-gray-200">
-                    <div className="flex justify-between items-start mb-3">
-                      <span className="font-semibold text-gray-900">Referencia {index + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const newRefs = formData.references.filter((_, i) => i !== index);
-                          setFormData({...formData, references: newRefs});
-                        }}
-                        className="text-red-600 hover:text-red-700 text-sm"
+                      <select
+                        required
+                        value={formData.contractType}
+                        onChange={(e) => setFormData({ ...formData, contractType: e.target.value as ContractType })}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
                       >
-                        Eliminar
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                          Tipo de referencia
-                        </label>
-                        <select
-                          value={ref.type}
-                          onChange={(e) => {
-                            const newRefs = [...formData.references];
-                            newRefs[index] = {...ref, type: e.target.value as any};
-                            setFormData({...formData, references: newRefs});
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
-                        >
-                          <option value="employer">Empleador</option>
-                          <option value="previous_landlord">Anterior casero</option>
-                          <option value="personal">Personal</option>
-                        </select>
-                      </div>
-
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">
-                            Nombre completo
-                          </label>
-                          <input
-                            type="text"
-                            value={ref.name}
-                            onChange={(e) => {
-                              const newRefs = [...formData.references];
-                              newRefs[index] = {...ref, name: e.target.value};
-                              setFormData({...formData, references: newRefs});
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
-                            placeholder="Nombre"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">
-                            Teléfono
-                          </label>
-                          <input
-                            type="tel"
-                            value={ref.phone}
-                            onChange={(e) => {
-                              const newRefs = [...formData.references];
-                              newRefs[index] = {...ref, phone: e.target.value};
-                              setFormData({...formData, references: newRefs});
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
-                            placeholder="+34 600 000 000"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 mb-1">
-                          Relación/Empresa
-                        </label>
-                        <input
-                          type="text"
-                          value={ref.relationship}
-                          onChange={(e) => {
-                            const newRefs = [...formData.references];
-                            newRefs[index] = {...ref, relationship: e.target.value};
-                            setFormData({...formData, references: newRefs});
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
-                          placeholder="Ej: Jefe directo en Tech Corp SL"
-                        />
-                      </div>
+                        <option value="">Selecciona...</option>
+                        <option value="indefinido">Indefinido</option>
+                        <option value="temporal">Temporal</option>
+                        <option value="autonomo">Autónomo</option>
+                        <option value="other">Otro</option>
+                      </select>
                     </div>
                   </div>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData({
-                      ...formData,
-                      references: [...formData.references, {
-                        type: 'employer',
-                        name: '',
-                        phone: '',
-                        email: '',
-                        relationship: ''
-                      }]
-                    });
-                  }}
-                  className="w-full py-3 border-2 border-dashed border-purple-300 rounded-lg text-purple-700 hover:bg-purple-50 transition font-semibold"
-                >
-                  + Añadir Referencia
-                </button>
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Nombre del empleador (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.employerName}
+                      onChange={(e) => setFormData({ ...formData, employerName: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                      placeholder="Empresa XYZ S.L."
+                    />
+                  </div>
+                </>
+              )}
 
-              {/* Skip option */}
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm text-yellow-800">
-                  <strong>Nota:</strong> Puedes omitir este paso, pero proporcionar referencias verificables
-                  mejora significativamente tu puntuación (+10 puntos por 2 referencias).
-                </p>
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Ingresos Mensuales Netos (€) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={formData.monthlyIncome}
+                  onChange={(e) => setFormData({ ...formData, monthlyIncome: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                  placeholder="2000"
+                />
               </div>
 
               <div className="flex gap-4">
@@ -643,37 +614,148 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 4: Property */}
+          {/* Step 4: References & History (Previously Step 3) */}
           {step === 4 && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos de la Propiedad</h2>
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Dirección del Inmueble *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.propertyAddress}
-                  onChange={(e) => setFormData({...formData, propertyAddress: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                  placeholder="Calle Gran Vía, 123, Barcelona"
-                />
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Referencias e Historial</h2>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Historial de Alquiler</h3>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    Dirección anterior (opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.previousAddress}
+                    onChange={(e) => setFormData({ ...formData, previousAddress: e.target.value })}
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                    placeholder="Calle Example, 45, Barcelona"
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Nombre del anterior casero (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.previousLandlordName}
+                      onChange={(e) => setFormData({ ...formData, previousLandlordName: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                      placeholder="José Martínez"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">
+                      Teléfono del casero (opcional)
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.previousLandlordPhone}
+                      onChange={(e) => setFormData({ ...formData, previousLandlordPhone: e.target.value })}
+                      className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                      placeholder="+34 600 000 000"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Renta Mensual (€) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  value={formData.monthlyRent}
-                  onChange={(e) => setFormData({...formData, monthlyRent: e.target.value})}
-                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
-                  placeholder="900"
-                />
+              <div className="space-y-4 mt-8">
+                <h3 className="text-lg font-semibold text-gray-900">Referencias</h3>
+                {formData.references.map((ref, index) => (
+                  <div key={index} className="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200">
+                    <div className="flex justify-between items-start mb-3">
+                      <span className="font-semibold text-gray-900">Referencia {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newRefs = formData.references.filter((_, i) => i !== index);
+                          setFormData({ ...formData, references: newRefs });
+                        }}
+                        className="text-red-600 hover:text-red-700 text-sm"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1">
+                          Tipo de referencia
+                        </label>
+                        <select
+                          value={ref.type}
+                          onChange={(e) => {
+                            const newRefs = [...formData.references];
+                            newRefs[index] = { ...ref, type: e.target.value as ReferenceType };
+                            setFormData({ ...formData, references: newRefs });
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
+                        >
+                          <option value="employer">Empleador</option>
+                          <option value="previous_landlord">Anterior casero</option>
+                          <option value="personal">Personal</option>
+                        </select>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Nombre completo
+                          </label>
+                          <input
+                            type="text"
+                            value={ref.name}
+                            onChange={(e) => {
+                              const newRefs = [...formData.references];
+                              newRefs[index] = { ...ref, name: e.target.value };
+                              setFormData({ ...formData, references: newRefs });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                            placeholder="Nombre"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">
+                            Teléfono
+                          </label>
+                          <input
+                            type="tel"
+                            value={ref.phone}
+                            onChange={(e) => {
+                              const newRefs = [...formData.references];
+                              newRefs[index] = { ...ref, phone: e.target.value };
+                              setFormData({ ...formData, references: newRefs });
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900"
+                            placeholder="+34 600 000 000"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      references: [...formData.references, {
+                        type: 'employer',
+                        name: '',
+                        phone: '',
+                        email: '',
+                        relationship: ''
+                      }]
+                    });
+                  }}
+                  className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition font-semibold"
+                >
+                  + Añadir Referencia
+                </button>
               </div>
 
               <div className="flex gap-4">
@@ -695,11 +777,63 @@ function NewScreeningContent() {
             </div>
           )}
 
-          {/* Step 5: Landlord & Package */}
+          {/* Step 5: Property (Previously Step 4) */}
           {step === 5 && (
             <div className="space-y-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Datos de la Propiedad</h2>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Dirección del Inmueble *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.propertyAddress}
+                  onChange={(e) => setFormData({ ...formData, propertyAddress: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                  placeholder="Calle Gran Vía, 123, Barcelona"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">
+                  Renta Mensual (€) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  value={formData.monthlyRent}
+                  onChange={(e) => setFormData({ ...formData, monthlyRent: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
+                  placeholder="900"
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setStep(4)}
+                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(6)}
+                  className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: Landlord & Package (Previously Step 5) */}
+          {step === 6 && (
+            <div className="space-y-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Tus Datos y Paquete</h2>
-              
+
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Tu Nombre (Propietario) *
@@ -708,7 +842,7 @@ function NewScreeningContent() {
                   type="text"
                   required
                   value={formData.landlordName}
-                  onChange={(e) => setFormData({...formData, landlordName: e.target.value})}
+                  onChange={(e) => setFormData({ ...formData, landlordName: e.target.value })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                   placeholder="María Pérez"
                 />
@@ -723,7 +857,7 @@ function NewScreeningContent() {
                     type="email"
                     required
                     value={formData.landlordEmail}
-                    onChange={(e) => setFormData({...formData, landlordEmail: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, landlordEmail: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                     placeholder="maria@email.com"
                   />
@@ -736,7 +870,7 @@ function NewScreeningContent() {
                     type="tel"
                     required
                     value={formData.landlordPhone}
-                    onChange={(e) => setFormData({...formData, landlordPhone: e.target.value})}
+                    onChange={(e) => setFormData({ ...formData, landlordPhone: e.target.value })}
                     className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 placeholder-gray-400"
                     placeholder="+34 600 000 000"
                   />
@@ -749,175 +883,116 @@ function NewScreeningContent() {
                   Modo de Pago *
                 </label>
                 <div className="grid md:grid-cols-2 gap-4 mb-6">
-                  <div 
-                    onClick={() => setFormData({...formData, billingMode: 'payperuse'})}
-                    className={`p-6 border-2 rounded-lg cursor-pointer transition ${
-                      formData.billingMode === 'payperuse' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                    }`}
+                  <div
+                    onClick={() => setFormData({ ...formData, billingMode: 'payperuse' })}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition ${formData.billingMode === 'payperuse'
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
                   >
-                    <div className="font-bold text-lg text-gray-900">💳 Pago por Informe</div>
-                    <div className="text-sm text-gray-700 mt-2">Sin compromiso, paga solo cuando lo necesites</div>
-                    <div className="text-xs text-gray-600 mt-2">Ideal para uso ocasional</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-gray-900">Pago Único</span>
+                      {formData.billingMode === 'payperuse' && <span className="text-blue-600">✓</span>}
+                    </div>
+                    <p className="text-sm text-gray-600">Paga solo por esta verificación.</p>
                   </div>
-                  <div 
-                    onClick={() => setFormData({...formData, billingMode: 'subscription'})}
-                    className={`p-6 border-2 rounded-lg cursor-pointer transition ${
-                      formData.billingMode === 'subscription' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                    }`}
+
+                  <div
+                    onClick={() => setFormData({ ...formData, billingMode: 'subscription' })}
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition ${formData.billingMode === 'subscription'
+                      ? 'border-blue-600 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
                   >
-                    <div className="font-bold text-lg text-gray-900">📅 Suscripción Mensual</div>
-                    <div className="text-sm text-gray-700 mt-2">Ahorra hasta 70% con planes mensuales</div>
-                    <div className="text-xs text-green-600 mt-2 font-semibold">⚡ Mejor valor</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-gray-900">Suscripción</span>
+                      <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">Ahorra 20%</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Ideal si verificas inquilinos frecuentemente.</p>
                   </div>
                 </div>
               </div>
 
-              {/* Pay Per Use Options */}
-              {formData.billingMode === 'payperuse' && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Selecciona Paquete *
-                  </label>
-                  <div className="grid md:grid-cols-2 gap-4">
-                    <div 
-                      onClick={() => setFormData({...formData, packageType: 'basic'})}
-                      className={`p-6 border-2 rounded-lg cursor-pointer transition ${
-                        formData.packageType === 'basic' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <div className="font-bold text-xl text-gray-900">Básica</div>
-                      <div className="text-3xl font-bold text-blue-600 my-2">€59</div>
-                      <div className="text-sm text-gray-700">Verificación esencial</div>
-                      <ul className="mt-3 space-y-1 text-xs text-gray-600">
-                        <li>✓ Identidad + Ingresos</li>
-                        <li>✓ Informe en 24h</li>
-                      </ul>
-                    </div>
-                    <div 
-                      onClick={() => setFormData({...formData, packageType: 'complete'})}
-                      className={`p-6 border-2 rounded-lg cursor-pointer transition relative ${
-                        formData.packageType === 'complete' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      <span className="absolute -top-3 right-4 bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
-                        RECOMENDADO
-                      </span>
-                      <div className="font-bold text-xl text-gray-900">Completa</div>
-                      <div className="text-3xl font-bold text-blue-600 my-2">€99</div>
-                      <div className="text-sm text-gray-700">Análisis exhaustivo</div>
-                      <ul className="mt-3 space-y-1 text-xs text-gray-600">
-                        <li>✓ Todo lo básico +</li>
-                        <li>✓ Solvencia + Referencias</li>
-                        <li>✓ Informe en 12h</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Subscription Options */}
               {formData.billingMode === 'subscription' && (
-                <div>
+                <div className="mb-6">
                   <label className="block text-sm font-semibold text-gray-900 mb-3">
-                    Selecciona Plan de Suscripción *
+                    Plan de suscripción *
                   </label>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div 
-                      onClick={() => setFormData({...formData, subscriptionPlan: 'starter'})}
-                      className={`p-5 border-2 rounded-lg cursor-pointer transition ${
-                        formData.subscriptionPlan === 'starter' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'starter' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'starter'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
                       }`}
                     >
-                      <div className="font-bold text-lg text-gray-900">Starter</div>
-                      <div className="text-2xl font-bold text-blue-600 my-2">€49<span className="text-sm text-gray-600">/mes</span></div>
-                      <div className="text-sm text-gray-700 mb-2">3 verificaciones/mes</div>
-                      <div className="text-xs text-green-600 font-semibold">Ahorra €148/mes</div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Starter</span>
+                        {formData.subscriptionPlan === 'starter' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">3 verificaciones/mes</p>
                     </div>
-                    <div 
-                      onClick={() => setFormData({...formData, subscriptionPlan: 'professional'})}
-                      className={`p-5 border-2 rounded-lg cursor-pointer transition relative ${
-                        formData.subscriptionPlan === 'professional' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'professional' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'professional'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
                       }`}
                     >
-                      <span className="absolute -top-3 right-4 bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-bold">
-                        POPULAR
-                      </span>
-                      <div className="font-bold text-lg text-gray-900">Professional</div>
-                      <div className="text-2xl font-bold text-blue-600 my-2">€129<span className="text-sm text-gray-600">/mes</span></div>
-                      <div className="text-sm text-gray-700 mb-2">10 verificaciones/mes</div>
-                      <div className="text-xs text-green-600 font-semibold">Ahorra €861/mes</div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Professional</span>
+                        {formData.subscriptionPlan === 'professional' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">10 verificaciones/mes</p>
                     </div>
-                    <div 
-                      onClick={() => setFormData({...formData, subscriptionPlan: 'enterprise'})}
-                      className={`p-5 border-2 rounded-lg cursor-pointer transition ${
-                        formData.subscriptionPlan === 'enterprise' ? 'border-blue-600 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'enterprise' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'enterprise'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
                       }`}
                     >
-                      <div className="font-bold text-lg text-gray-900">Enterprise</div>
-                      <div className="text-2xl font-bold text-blue-600 my-2">€299<span className="text-sm text-gray-600">/mes</span></div>
-                      <div className="text-sm text-gray-700 mb-2">30 verificaciones/mes</div>
-                      <div className="text-xs text-green-600 font-semibold">Ahorra €2,671/mes</div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Enterprise</span>
+                        {formData.subscriptionPlan === 'enterprise' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">30 verificaciones/mes</p>
                     </div>
-                  </div>
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-sm text-green-800">
-                      ✨ <strong>7 días de prueba gratuita</strong> - Cancela en cualquier momento
-                    </p>
                   </div>
                 </div>
               )}
-
-              {/* Price Summary */}
-              <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-6 rounded-lg border-2 border-blue-200">
-                <div className="flex justify-between items-center">
-                  <span className="font-semibold text-gray-900 text-lg">
-                    {formData.billingMode === 'payperuse' ? 'Total a pagar:' : 'Primer mes:'}
-                  </span>
-                  <span className="text-3xl font-bold text-blue-600">
-                    {formData.billingMode === 'payperuse' 
-                      ? `€${formData.packageType === 'basic' ? '59' : '99'}`
-                      : formData.subscriptionPlan === 'starter' ? '€0'
-                      : formData.subscriptionPlan === 'professional' ? '€0'
-                      : '€0'
-                    }
-                  </span>
-                </div>
-                {formData.billingMode === 'subscription' && (
-                  <p className="text-sm text-gray-700 mt-2">
-                    Luego €{formData.subscriptionPlan === 'starter' ? '49' : formData.subscriptionPlan === 'professional' ? '129' : '299'}/mes
-                  </p>
-                )}
-              </div>
 
               <div className="flex gap-4">
                 <button
                   type="button"
-                  onClick={() => setStep(4)}
-                  disabled={submitting}
-                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setStep(5)}
+                  className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition font-semibold"
                 >
                   Anterior
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className={`w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold ${submitting ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                 >
                   {submitting ? (
                     <>
-                      <div className="animate-spin h-5 w-5 border-2 border-white rounded-full border-t-transparent"></div>
-                      <span>Procesando...</span>
+                      <span className="animate-spin inline-block mr-2">⟳</span>
+                      Procesando...
                     </>
                   ) : (
-                    formData.billingMode === 'subscription' ? 'Comenzar Prueba Gratuita' : 'Iniciar Verificación y Pagar'
+                    formData.billingMode === 'subscription' ? 'Suscribirme y Pagar' : 'Iniciar Verificación y Pagar'
                   )}
                 </button>
               </div>
             </div>
           )}
         </form>
-      </div>
-    </main>
+      </div >
+    </main >
   );
 }
 

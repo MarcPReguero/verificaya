@@ -14,7 +14,7 @@
 1. **Landing Page**
    - Hero section with clear value proposition
    - Features showcase
-   - Pricing cards (Basic €49, Complete €99)
+   - Pricing cards (Basic €59, Complete €99)
    - Call-to-action buttons
    - Responsive design (mobile/desktop)
 

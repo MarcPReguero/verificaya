@@ -198,7 +198,7 @@ del sistema.
 | Login | Email + Password | demo / demo |
 | Crear Verificación | Sí | Sí |
 | Proceso de Pago | Stripe Checkout | **Omitido** |
-| Costo | €49 / €89 | **€0** |
+| Costo | €59 / €99 | **€0** |
 | Ver Informes | Sí | Sí |
 | Límite Verificaciones | Según pago | **Ilimitado** |
 | Badge Visual | No | **Sí (DEMO)** |

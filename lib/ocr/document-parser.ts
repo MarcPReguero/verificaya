@@ -9,7 +9,7 @@ import { OCRResult } from './google-vision';
  * Parsed document data
  */
 export interface ParsedDocument {
-  type: 'DNI' | 'NIE' | 'Pasaporte' | 'Unknown';
+  type: 'DNI' | 'NIE' | 'PASSPORT' | 'Unknown';
   documentNumber: string;
   name?: string;
   surname?: string;
@@ -38,28 +38,28 @@ function parseDNI(text: string): Partial<ParsedDocument> {
   }
 
   // Extract name (after "Nombre" or similar)
-  const nameRegex = /(?:Nombre|Name)[:\s]+([A-ZÁÉÍÓÚÑ\s]+)/i;
+  const nameRegex = /(?:Nombre|Name)[:\s]+([\p{L}\s]+)/iu;
   const nameMatch = text.match(nameRegex);
   if (nameMatch) {
     result.name = nameMatch[1].trim();
   }
 
   // Extract surname (after "Apellidos" or similar)
-  const surnameRegex = /(?:Apellidos?|Surname)[:\s]+([A-ZÁÉÍÓÚÑ\s]+)/i;
+  const surnameRegex = /(?:Apellidos?|Surname)[:\s]+([\p{L}\s]+)/iu;
   const surnameMatch = text.match(surnameRegex);
   if (surnameMatch) {
     result.surname = surnameMatch[1].trim();
   }
 
   // Extract birth date (DD/MM/YYYY or DD.MM.YYYY)
-  const birthRegex = /(?:Nacimiento|Birth)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const birthRegex = /(?:Nacimiento|Birth)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const birthMatch = text.match(birthRegex);
   if (birthMatch) {
     result.birthDate = `${birthMatch[1]}/${birthMatch[2]}/${birthMatch[3]}`;
   }
 
   // Extract expiry date
-  const expiryRegex = /(?:Validez|Valid|Caducidad)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const expiryRegex = /(?:Validez|Valid|Caducidad)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const expiryMatch = text.match(expiryRegex);
   if (expiryMatch) {
     result.expiryDate = `${expiryMatch[1]}/${expiryMatch[2]}/${expiryMatch[3]}`;
@@ -79,7 +79,7 @@ function parseDNI(text: string): Partial<ParsedDocument> {
 }
 
 /**
- * Parse Spanish NIE (Número de Identidad de Extranjero)
+ * Parse Spanish NIE (Numero de Identidad de Extranjero)
  */
 function parseNIE(text: string): Partial<ParsedDocument> {
   const result: Partial<ParsedDocument> = {
@@ -94,28 +94,28 @@ function parseNIE(text: string): Partial<ParsedDocument> {
   }
 
   // Extract name
-  const nameRegex = /(?:Nombre|Name)[:\s]+([A-ZÁÉÍÓÚÑ\s]+)/i;
+  const nameRegex = /(?:Nombre|Name)[:\s]+([\p{L}\s]+)/iu;
   const nameMatch = text.match(nameRegex);
   if (nameMatch) {
     result.name = nameMatch[1].trim();
   }
 
   // Extract surname
-  const surnameRegex = /(?:Apellidos?|Surname)[:\s]+([A-ZÁÉÍÓÚÑ\s]+)/i;
+  const surnameRegex = /(?:Apellidos?|Surname)[:\s]+([\p{L}\s]+)/iu;
   const surnameMatch = text.match(surnameRegex);
   if (surnameMatch) {
     result.surname = surnameMatch[1].trim();
   }
 
   // Extract birth date
-  const birthRegex = /(?:Nacimiento|Birth)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const birthRegex = /(?:Nacimiento|Birth)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const birthMatch = text.match(birthRegex);
   if (birthMatch) {
     result.birthDate = `${birthMatch[1]}/${birthMatch[2]}/${birthMatch[3]}`;
   }
 
   // Extract expiry date
-  const expiryRegex = /(?:Validez|Valid|Caducidad)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const expiryRegex = /(?:Validez|Valid|Caducidad)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const expiryMatch = text.match(expiryRegex);
   if (expiryMatch) {
     result.expiryDate = `${expiryMatch[1]}/${expiryMatch[2]}/${expiryMatch[3]}`;
@@ -143,7 +143,7 @@ function parseNIE(text: string): Partial<ParsedDocument> {
  */
 function parsePassport(text: string): Partial<ParsedDocument> {
   const result: Partial<ParsedDocument> = {
-    type: 'Pasaporte',
+    type: 'PASSPORT',
   };
 
   // Extract passport number (various formats)
@@ -166,14 +166,14 @@ function parsePassport(text: string): Partial<ParsedDocument> {
   }
 
   // Extract birth date from MRZ or text
-  const birthRegex = /(?:Date of birth|Fecha de nacimiento)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const birthRegex = /(?:Date of birth|Fecha de nacimiento)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const birthMatch = text.match(birthRegex);
   if (birthMatch) {
     result.birthDate = `${birthMatch[1]}/${birthMatch[2]}/${birthMatch[3]}`;
   }
 
   // Extract expiry date
-  const expiryRegex = /(?:Date of expiry|Fecha de caducidad)[:\s]*(\d{2})[\.\/](\d{2})[\.\/](\d{4})/i;
+  const expiryRegex = /(?:Date of expiry|Fecha de caducidad)[:\s]*(\d{2})[./](\d{2})[./](\d{4})/i;
   const expiryMatch = text.match(expiryRegex);
   if (expiryMatch) {
     result.expiryDate = `${expiryMatch[1]}/${expiryMatch[2]}/${expiryMatch[3]}`;
@@ -199,7 +199,7 @@ function parsePassport(text: string): Partial<ParsedDocument> {
 /**
  * Detect document type from text
  */
-function detectDocumentType(text: string): 'DNI' | 'NIE' | 'Pasaporte' | 'Unknown' {
+function detectDocumentType(text: string): 'DNI' | 'NIE' | 'PASSPORT' | 'Unknown' {
   const upperText = text.toUpperCase();
 
   // Check for DNI pattern
@@ -221,7 +221,7 @@ function detectDocumentType(text: string): 'DNI' | 'NIE' | 'Pasaporte' | 'Unknow
       upperText.includes('PASSPORT') || 
       upperText.includes('PASAPORTE') ||
       upperText.includes('P<ESP')) {
-    return 'Pasaporte';
+      return 'PASSPORT';
   }
 
   return 'Unknown';
@@ -246,10 +246,10 @@ export function parseDocument(ocrResult: OCRResult): ParsedDocument {
     case 'NIE':
       parsed = { ...parsed, ...parseNIE(text) };
       break;
-    case 'Pasaporte':
+    case 'PASSPORT':
       parsed = { ...parsed, ...parsePassport(text) };
       break;
-    default:
+    default: {
       // Try all parsers
       const dniData = parseDNI(text);
       const nieData = parseNIE(text);
@@ -258,7 +258,8 @@ export function parseDocument(ocrResult: OCRResult): ParsedDocument {
       // Use the one with most data
       if (dniData.documentNumber) parsed = { ...parsed, ...dniData, type: 'DNI' };
       else if (nieData.documentNumber) parsed = { ...parsed, ...nieData, type: 'NIE' };
-      else if (passportData.documentNumber) parsed = { ...parsed, ...passportData, type: 'Pasaporte' };
+      else if (passportData.documentNumber) parsed = { ...parsed, ...passportData, type: 'PASSPORT' };
+    }
   }
 
   // Combine name and surname if both present
@@ -294,12 +295,12 @@ export function validateDocument(parsed: ParsedDocument): {
 
   // Check document number
   if (!parsed.documentNumber) {
-    errors.push('No se pudo extraer el número de documento');
+    errors.push('No se pudo extraer el numero de documento');
   } else {
     // Validate DNI format
     if (parsed.type === 'DNI') {
       if (!/^\d{8}[A-Z]$/.test(parsed.documentNumber)) {
-        errors.push('Formato de DNI inválido');
+        errors.push('Formato de DNI invalido');
       } else {
         // Validate DNI check letter
         const letters = 'TRWAGMYFPDXBNJZSQVHLCKE';
@@ -315,7 +316,7 @@ export function validateDocument(parsed: ParsedDocument): {
     // Validate NIE format
     if (parsed.type === 'NIE') {
       if (!/^[XYZ]\d{7}[A-Z]$/.test(parsed.documentNumber)) {
-        errors.push('Formato de NIE inválido');
+        errors.push('Formato de NIE invalido');
       }
     }
   }

@@ -168,7 +168,7 @@ export default function BlogPostPage({ params }: { params: Promise<{ slug: strin
               ¿Quieres evitar esta situación?
             </h3>
             <p className="text-base sm:text-lg mb-4 sm:mb-6 opacity-90">
-              Verifica a tus inquilinos profesionalmente desde €49
+              Verifica a tus inquilinos profesionalmente desde €59
             </p>
             <Link
               href="/screening/new"

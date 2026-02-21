@@ -275,8 +275,8 @@ Enterprise (€299/mes) → "30x capacidad, solo +€170"
 ### Escenario Conservador (Año 1)
 
 **Pay-per-use:**
-- 50 clientes/mes × €85 promedio = €4,250/mes
-- Anual: €51,000
+- 50 clientes/mes × €79 promedio = €3,950/mes
+- Anual: €47,400
 
 **Suscripciones:**
 - Starter: 20 clientes × €49 = €980/mes
@@ -285,13 +285,13 @@ Enterprise (€299/mes) → "30x capacidad, solo +€170"
 - Subtotal suscripciones: €2,868/mes
 - Anual: €34,416
 
-**Total Año 1:** €85,416
+**Total Año 1:** €81,816
 
 ### Escenario Optimista (Año 2)
 
 **Pay-per-use:**
-- 80 clientes/mes × €85 promedio = €6,800/mes
-- Anual: €81,600
+- 80 clientes/mes × €79 promedio = €6,320/mes
+- Anual: €75,840
 
 **Suscripciones:**
 - Starter: 40 clientes × €49 = €1,960/mes
@@ -300,7 +300,7 @@ Enterprise (€299/mes) → "30x capacidad, solo +€170"
 - Subtotal suscripciones: €6,680/mes
 - Anual: €80,160
 
-**Total Año 2:** €161,760
+**Total Año 2:** €156,000
 
 ---
 
