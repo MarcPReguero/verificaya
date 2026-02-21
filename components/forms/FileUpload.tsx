@@ -10,6 +10,52 @@ interface FileUploadProps {
   onUploadComplete?: (url: string) => void;
 }
 
+export type ScreeningDocumentType = 'payslip' | 'employment-contract' | 'id-document' | 'bank-statement' | 'reference';
+
+export async function uploadScreeningDocument(params: {
+  screeningId: string;
+  documentType: ScreeningDocumentType;
+  file: File;
+}): Promise<string> {
+  const { screeningId, documentType, file } = params;
+
+  const fileExt = file.name.split('.').pop() || 'bin';
+  const fileName = `${screeningId}/${documentType}-${Date.now()}.${fileExt}`;
+
+  const { data: uploadedData, error: uploadError } = await supabase.storage
+    .from('documents')
+    .upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (uploadError) {
+    throw uploadError;
+  }
+
+  if (!uploadedData?.path) {
+    throw new Error('Upload response did not include path');
+  }
+
+  const { data: urlData } = supabase.storage
+    .from('documents')
+    .getPublicUrl(fileName);
+
+  const { error: dbError } = await supabase
+    .from('screening_documents')
+    .insert({
+      screening_id: screeningId,
+      document_type: documentType,
+      file_url: urlData.publicUrl,
+    });
+
+  if (dbError) {
+    throw dbError;
+  }
+
+  return urlData.publicUrl;
+}
+
 export default function FileUpload({ 
   screeningId, 
   documentType, 
@@ -21,7 +67,7 @@ export default function FileUpload({
   const [error, setError] = useState<string>('');
 
   const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
+  try {
       setUploading(true);
       setError('');
 
@@ -30,43 +76,16 @@ export default function FileUpload({
       }
 
       const file = event.target.files[0];
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${screeningId}/${documentType}-${Date.now()}.${fileExt}`;
-
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: false,
-        });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(fileName);
-
-      // Save document record to database
-      const { error: dbError } = await supabase
-        .from('screening_documents')
-        .insert({
-          screening_id: screeningId,
-          document_type: documentType,
-          file_url: urlData.publicUrl,
-        });
-
-      if (dbError) {
-        throw dbError;
-      }
+      const uploadUrl = await uploadScreeningDocument({
+        screeningId,
+        documentType,
+        file,
+      });
 
       setFileName(file.name);
-      onUploadComplete?.(urlData.publicUrl);
-    } catch (error: any) {
-      setError(error.message);
+      onUploadComplete?.(uploadUrl);
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'No se pudo subir el archivo');
       console.error('Error uploading file:', error);
     } finally {
       setUploading(false);

@@ -1,10 +1,14 @@
 import { createCanvas } from 'canvas';
 const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
 
+interface ErrorWithMessage {
+  message?: string;
+}
+
 // Explicitly set worker source to avoid fake worker issues
 try {
     pdfjsLib.GlobalWorkerOptions.workerSrc = require.resolve('pdfjs-dist/legacy/build/pdf.worker.js');
-} catch (e) {
+} catch {
     console.warn('Could not resolve pdf.worker.js, pdfjs-dist might fail if worker is needed.');
 }
 
@@ -35,21 +39,26 @@ export async function convertPdfToImage(pdfBuffer: Buffer): Promise<Buffer> {
         // Create canvas
         const canvas = createCanvas(viewport.width, viewport.height);
         const context = canvas.getContext('2d');
+        if (!context) {
+            throw new Error('Failed to create PDF canvas context');
+        }
 
         // Render page to canvas
-        await page.render({
-            canvasContext: context as any,
-            viewport: viewport,
-        } as any).promise;
+        const renderContext = {
+            canvasContext: context,
+            viewport,
+        } as Parameters<typeof page.render>[0];
+        await page.render(renderContext).promise;
 
         // Convert canvas to buffer
         const imageBuffer = canvas.toBuffer('image/png');
 
         return imageBuffer;
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('Error converting PDF to image:', error);
-        throw new Error(`Failed to convert PDF to image: ${error.message}`);
+        const message = error instanceof Error ? error.message : error instanceof Object && 'message' in error ? (error as ErrorWithMessage).message : 'Unknown error';
+        throw new Error(`Failed to convert PDF to image: ${message}`);
     }
 }
 
@@ -74,15 +83,19 @@ export async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
                 const PDFParser = require('pdf2json');
                 const pdfParser = new PDFParser(null, 1); // 1 = text only
 
-                pdfParser.on("pdfParser_dataError", (errData: any) => {
+                pdfParser.on("pdfParser_dataError", (errData: unknown) => {
                     clearTimeout(timeout);
                     console.error('pdf2json dataError:', errData);
-                    reject(new Error(errData.parserError));
+                    const parserError = isObject(errData) && typeof errData.parserError === 'string'
+                        ? errData.parserError
+                        : 'Unknown parser error';
+                    reject(new Error(parserError));
                 });
 
-                pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
+                pdfParser.on("pdfParser_dataReady", (pdfData: unknown) => {
                     clearTimeout(timeout);
                     console.log('pdf2json dataReady');
+                    void pdfData;
                     try {
                         const text = pdfParser.getRawTextContent();
                         console.log('Text extracted, length:', text.length);
@@ -95,16 +108,21 @@ export async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
 
                 console.log('Parsing buffer...');
                 pdfParser.parseBuffer(pdfBuffer);
-            } catch (error: any) {
+            } catch (error: unknown) {
                 clearTimeout(timeout);
                 console.error('Error initializing or parsing with pdf2json:', error);
                 reject(error);
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('PDF extraction failed in catch block:', error);
-        throw new Error(`Failed to extract text from PDF: ${error.message}`);
+        const message = error instanceof Error ? error.message : error instanceof Object && 'message' in error ? (error as ErrorWithMessage).message : 'Unknown error';
+        throw new Error(`Failed to extract text from PDF: ${message}`);
     }
 
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
 }
 

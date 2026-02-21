@@ -516,11 +516,11 @@ Costo: €20/mes
 - 2 suscripciones Enterprise
 
 **Ingresos mensuales:**
-- Pay-per-use: €4,250 (50 × €85 promedio)
+- Pay-per-use: €3,950 (50 × €79 promedio)
 - Suscripciones: €2,868
-- **Total: €7,118/mes**
+- **Total: €6,818/mes**
 
-**Ingresos anuales:** €85,416
+**Ingresos anuales:** €81,816
 
 **Costos:**
 - Servicios: €70/mes = €840/año
@@ -537,11 +537,11 @@ Costo: €20/mes
 - 5 suscripciones Enterprise
 
 **Ingresos mensuales:**
-- Pay-per-use: €6,800
+- Pay-per-use: €6,320
 - Suscripciones: €6,680
-- **Total: €13,480/mes**
+- **Total: €13,000/mes**
 
-**Ingresos anuales:** €161,760
+**Ingresos anuales:** €156,000
 
 **Costos:**
 - Servicios: €100/mes = €1,200/año

@@ -27,7 +27,7 @@ export interface TenantScreening {
   landlordId: string;
   propertyAddress: string;
   monthlyRent: number;
-  status: 'pending' | 'processing' | 'completed' | 'rejected';
+  status: 'pending' | 'processing' | 'completed' | 'rejected' | 'failed';
   score?: number;
   reportUrl?: string;
   createdAt: Date;

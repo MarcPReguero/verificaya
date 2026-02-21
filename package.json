@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "verify-setup": "node scripts/verify-setup.js",
-    "setup": "node scripts/verify-setup.js"
+    "setup": "node scripts/verify-setup.js",
+    "verify-screening": "tsx scripts/verify-screening-score.ts"
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.3",
@@ -17,6 +18,7 @@
     "@react-email/render": "^2.0.0",
     "@stripe/stripe-js": "^8.0.0",
     "@supabase/supabase-js": "^2.75.0",
+    "caniuse-lite": "^1.0.30001770",
     "canvas": "^3.2.0",
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",

@@ -3,11 +3,18 @@ import { jsPDF } from 'jspdf';
 import { createRequire } from 'module';
 
 // Mock global for pdf-parse polyfill test
+type Point2D = { x: number; y: number };
+type PDFParserData = { parserError?: string };
+
+function isPDFParserData(value: unknown): value is PDFParserData {
+  return typeof value === 'object' && value !== null && 'parserError' in value;
+}
+
 if (typeof global.DOMMatrix === 'undefined') {
-    (global as any).DOMMatrix = class DOMMatrix {
+    (global as { DOMMatrix?: new () => { transformPoint(point: Point2D): Point2D } }).DOMMatrix = class DOMMatrix {
         a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
         constructor() { }
-        transformPoint(point: any) { return point; }
+        transformPoint(point: Point2D): Point2D { return point; }
     };
 }
 
@@ -26,29 +33,33 @@ async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
                 const PDFParser = require('pdf2json');
                 const pdfParser = new PDFParser(null, 1);
 
-                pdfParser.on("pdfParser_dataError", (errData: any) => {
+                pdfParser.on("pdfParser_dataError", (errData: unknown) => {
                     clearTimeout(timeout);
-                    reject(new Error(errData.parserError));
+                    const message = isPDFParserData(errData) && typeof errData.parserError === 'string'
+                        ? errData.parserError
+                        : 'pdf2json parser error';
+                    reject(new Error(message));
                 });
 
-                pdfParser.on("pdfParser_dataReady", (pdfData: any) => {
+                pdfParser.on("pdfParser_dataReady", () => {
                     clearTimeout(timeout);
                     try {
                         const text = pdfParser.getRawTextContent();
                         resolve(text);
-                    } catch (e) {
-                        reject(e);
+                    } catch (_error) {
+                        reject(_error);
                     }
                 });
 
                 pdfParser.parseBuffer(pdfBuffer);
-            } catch (error: any) {
+            } catch (error: unknown) {
                 clearTimeout(timeout);
                 reject(error);
             }
         });
-    } catch (error: any) {
-        console.warn(`pdf2json failed (${error.message}), falling back to pdf-parse...`);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        console.warn(`pdf2json failed (${message}), falling back to pdf-parse...`);
     }
 
     // Strategy 2: Fallback to pdf-parse
@@ -60,9 +71,10 @@ async function extractTextFromPdf(pdfBuffer: Buffer): Promise<string> {
         }
         const data = await pdf(pdfBuffer);
         return data.text;
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('All PDF extraction methods failed:', error);
-        throw new Error(`Failed to extract text from PDF: ${error.message}`);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        throw new Error(`Failed to extract text from PDF: ${message}`);
     }
 }
 

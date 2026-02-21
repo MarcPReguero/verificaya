@@ -84,7 +84,7 @@ if (isDemoMode) {
 **Demo Next Steps:**
 ```
 Has explorado el flujo completo. En una verificación real:
-• Se procesaría el pago con Stripe (€49 o €99)
+• Se procesaría el pago con Stripe (€59 o €99)
 • Se realizaría consulta ASNEF real
 • Se verificarían documentos con OCR
 • Se enviarían emails al inquilino y propietario
@@ -194,7 +194,7 @@ Has explorado el flujo completo. En una verificación real:
    
 3. Payment
    ↓ Redirect to Stripe Checkout
-   ↓ Pay €49 or €99
+   ↓ Pay €59 or €99
    
 4. Success Page (/screening/[id]/success)
    ↓ "¡Pago Confirmado!"
@@ -207,7 +207,7 @@ Has explorado el flujo completo. En una verificación real:
 ## 💰 CONVERSION IMPACT
 
 ### Before (No Demo):
-- User sees €49 price → hesitates
+- User sees €59 price → hesitates
 - Bounce rate: ~80%
 - Conversions: Low
 

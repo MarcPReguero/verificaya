@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { blogPosts, blogStats, getPostsByCategory } from '@/lib/data/blogPosts';
+import { blogPosts, blogStats } from '@/lib/data/blogPosts';
 
 export default function BlogPage() {
   const [filtroCategoria, setFiltroCategoria] = useState<string>('Todas');
@@ -138,7 +138,7 @@ export default function BlogPage() {
             Verificar Inquilino Ahora
           </Link>
           <p className="mt-4 sm:mt-6 text-xs sm:text-sm opacity-75">
-            💳 Desde €49 · ✓ Resultados en 24h · 🛡️ Protege tu patrimonio
+            💳 Desde €59 · ✓ Resultados en 24h · 🛡️ Protege tu patrimonio
           </p>
         </div>
       </div>

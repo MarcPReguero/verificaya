@@ -56,8 +56,12 @@ export async function signUp(email: string, password: string, name: string) {
     }
 
     return { user: authData.user, session: authData.session, error: null };
-  } catch (error: any) {
-    return { user: null, session: null, error: error.message };
+  } catch (error: unknown) {
+    return {
+      user: null,
+      session: null,
+      error: error instanceof Error ? error.message : 'Error en registro',
+    };
   }
 }
 
@@ -82,8 +86,12 @@ export async function signIn(email: string, password: string) {
     }
 
     return { user: data.user, session: data.session, error: null };
-  } catch (error: any) {
-    return { user: null, session: null, error: error.message };
+  } catch (error: unknown) {
+    return {
+      user: null,
+      session: null,
+      error: error instanceof Error ? error.message : 'Error en inicio de sesión',
+    };
   }
 }
 
@@ -111,7 +119,7 @@ export async function getCurrentUser(): Promise<User | null> {
       email: user.email || '',
       name: profile?.name || user.user_metadata?.name || '',
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -151,7 +159,7 @@ export async function getLandlordProfile(userId: string) {
 
     if (error) throw error;
     return { profile: data, error: null };
-  } catch (error: any) {
-    return { profile: null, error: error.message };
+  } catch (error: unknown) {
+    return { profile: null, error: error instanceof Error ? error.message : 'Error al obtener perfil' };
   }
 }

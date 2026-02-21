@@ -109,7 +109,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const docData = ocrResult.data;
+  const docData = ocrResult.data as Record<string, unknown> | null | undefined;
+  type StandardizedDocument = {
+    type: string;
+    [key: string]: string | number | boolean | null | undefined;
+  };
+  const normalizeIdentityType = (type: string | undefined) => {
+    if (!type) {
+      return 'Unknown';
+    }
+    const upper = type.toUpperCase();
+    if (upper === 'PASAPORTE' || upper === 'PASSPORT') {
+      return 'PASSPORT';
+    }
+    return type;
+  };
 
     if (!docData) {
       return NextResponse.json(
@@ -123,7 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Return results based on document type
-    let standardizedDocument: any = {};
+    let standardizedDocument: StandardizedDocument = {};
 
     if (documentType === 'PAYSLIP') {
       standardizedDocument = {
@@ -148,7 +162,7 @@ export async function POST(request: NextRequest) {
     } else {
       // IDENTITY
       standardizedDocument = {
-        type: docData.type || 'Unknown',
+        type: normalizeIdentityType(docData.type),
         documentNumber: docData.documentNumber || '',
         name: docData.name || '',
         surname: docData.surname || '',
@@ -183,12 +197,12 @@ export async function POST(request: NextRequest) {
       }),
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('OCR API Error:', error);
     return NextResponse.json(
       {
         error: 'Internal server error',
-        message: error.message || 'An unexpected error occurred',
+        message: error instanceof Error ? error.message : 'An unexpected error occurred',
       },
       { status: 500 }
     );

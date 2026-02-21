@@ -123,8 +123,8 @@ export async function analyzeDocument(
 
         // Extract text from block
         const blockText = block.paragraphs
-          ?.flatMap((p: any) => p.words?.map((w: any) => 
-            w.symbols?.map((s: any) => s.text).join('') || ''
+          ?.flatMap((paragraph) => paragraph?.words?.map((word) =>
+            (word?.symbols || []).map((symbol) => symbol?.text || '').join('')
           ) || [])
           .join(' ') || '';
 
@@ -150,7 +150,7 @@ export async function analyzeDocument(
     // Extract faces if requested
     let faces: FaceInfo[] | undefined;
     if (options.detectFaces && result.faceAnnotations) {
-      faces = result.faceAnnotations.map((face: any) => ({
+      faces = result.faceAnnotations.map((face) => ({
         confidence: face.detectionConfidence || 0,
         boundingBox: {
           x: face.boundingPoly?.vertices?.[0]?.x || 0,
@@ -165,8 +165,8 @@ export async function analyzeDocument(
     let labels: string[] | undefined;
     if (options.detectLabels && result.labelAnnotations) {
       labels = result.labelAnnotations
-        .filter((label: any) => (label.score || 0) > 0.7)
-        .map((label: any) => label.description || '')
+        .filter((label) => (label.score || 0) > 0.7)
+        .map((label) => label.description || '')
         .filter(Boolean);
     }
 
@@ -178,14 +178,15 @@ export async function analyzeDocument(
       faces,
       labels,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('OCR Error:', error);
+    const message = error instanceof Error ? error.message : 'OCR analysis failed';
     return {
       success: false,
       text: '',
       confidence: 0,
       blocks: [],
-      error: error.message || 'OCR analysis failed',
+      error: message,
     };
   }
 }

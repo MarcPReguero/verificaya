@@ -1,12 +1,42 @@
 import Stripe from 'stripe';
 
-// Use environment variable or fallback to a placeholder for build purposes
-// NOTE: Payments will NOT work with the placeholder key - add real key in production
-const stripeKey = process.env.STRIPE_SECRET_KEY || 'sk_test_51placeholder_for_build_only';
+const stripWhitespace = (value: string | undefined): string =>
+  (value || '').trim();
 
-export const stripe = new Stripe(stripeKey, {
-  apiVersion: '2025-09-30.clover',
-});
+const isPlaceholderKey = (key: string): boolean => {
+  const normalized = key.toLowerCase();
+  return (
+    normalized.includes('placeholder') ||
+    normalized.includes('your_') ||
+    normalized.includes('xxx')
+  );
+};
+
+const resolveStripeSecretKey = (): string | null => {
+  const key = stripWhitespace(process.env.STRIPE_SECRET_KEY);
+
+  if (!key) return null;
+  if (!key.startsWith('sk_')) return null;
+  if (isPlaceholderKey(key)) return null;
+
+  return key;
+};
+
+export const isStripeConfigured = (): boolean => {
+  return resolveStripeSecretKey() !== null;
+};
+
+export const getStripeClient = (): Stripe => {
+  const stripeSecretKey = resolveStripeSecretKey();
+
+  if (!stripeSecretKey) {
+    throw new Error('Stripe is not configured with a valid STRIPE_SECRET_KEY');
+  }
+
+  return new Stripe(stripeSecretKey, {
+    apiVersion: '2025-09-30.clover',
+  });
+};
 
 // Pay-per-Use Pricing (Pago por Informe)
 export const PAY_PER_USE_PRICES = {

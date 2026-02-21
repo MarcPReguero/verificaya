@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "VerificaYa - Verifica Inquilinos Profesionalmente",
-  description: "Verifica inquilinos de forma profesional con ASNEF, NIE/DNI, ingresos y referencias. Informes en 24h desde €49. Protege tu patrimonio.",
+  description: "Verifica inquilinos de forma profesional con ASNEF, NIE/DNI, ingresos y referencias. Informes en 24h desde €59. Protege tu patrimonio.",
 };
 
 export default function RootLayout({

@@ -12,7 +12,7 @@
  */
 
 export interface CreditCheckRequest {
-  documentType: 'DNI' | 'NIE' | 'Passport';
+  documentType: 'DNI' | 'NIE' | 'PASSPORT';
   documentNumber: string;
   fullName: string;
   birthDate?: string;

@@ -40,8 +40,8 @@ export async function sendEmail({ to, subject, react, from }: EmailOptions) {
         });
 
         return { success: true, data };
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('❌ Failed to send email:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: error instanceof Error ? error.message : 'Failed to send email' };
     }
 }

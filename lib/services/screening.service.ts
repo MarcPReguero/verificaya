@@ -1,6 +1,38 @@
 import { TenantScreening, ScreeningResult, FraudFlag, ScoringFactor } from '@/types';
 import { AsnefService, CreditCheckResult } from './asnef.service';
 
+interface OcrCrossValidationContext {
+  identity?: {
+    type?: string;
+    documentNumber?: string;
+    fullName?: string;
+    name?: string;
+    surname?: string;
+  };
+  payslip?: {
+    netIncome?: unknown;
+    grossIncome?: unknown;
+    employerName?: string;
+    employeeName?: string;
+  };
+  contract?: {
+    landlordName?: string;
+    tenantName?: string;
+    propertyAddress?: string;
+    monthlyRent?: unknown;
+    startDate?: string;
+    duration?: string;
+  };
+}
+
+interface OcrCrossValidationResult {
+  scoreDelta: number;
+  notes: string[];
+  fraudFlags: FraudFlag[];
+  negativeFactors: ScoringFactor[];
+  identityVerified?: boolean;
+}
+
 export class ScreeningService {
   private static readonly MIN_LIVING_EXPENSES = 600; // Minimum monthly amount needed for living expenses (conservative)
 
@@ -11,7 +43,8 @@ export class ScreeningService {
    */
   static calculateScore(
     screening: Partial<TenantScreening>,
-    creditCheckResult?: CreditCheckResult
+    creditCheckResult?: CreditCheckResult,
+    ocrContext?: OcrCrossValidationContext
   ): ScreeningResult {
     let score = 0;
     const notes: string[] = [];
@@ -268,8 +301,15 @@ export class ScreeningService {
         });
       }
 
-      // TODO: Add OCR cross-validation when documents are uploaded
-      // Check if name on ID matches name on payslip, etc.
+      const ocrValidation = this.applyOcrCrossValidation(screening, ocrContext);
+      score += ocrValidation.scoreDelta;
+      notes.push(...ocrValidation.notes);
+      fraudFlags.push(...ocrValidation.fraudFlags);
+      negativeFactors.push(...ocrValidation.negativeFactors);
+
+      if (ocrValidation.identityVerified === false) {
+        identityVerified = false;
+      }
     } else {
       notes.push('⚠ Pendiente verificación de documentos');
       negativeFactors.push({
@@ -415,15 +455,17 @@ export class ScreeningService {
     }
 
     // Determine approval
-    const approved = score >= 60;
+    const normalizedScore = Math.max(0, score);
+
+    const approved = normalizedScore >= 60;
 
     // Determine risk level
     let riskLevel: 'low' | 'medium' | 'high' | 'very_high';
-    if (score >= 80) {
+    if (normalizedScore >= 80) {
       riskLevel = 'low';
-    } else if (score >= 70) {
+    } else if (normalizedScore >= 70) {
       riskLevel = 'medium';
-    } else if (score >= 50) {
+    } else if (normalizedScore >= 50) {
       riskLevel = 'high';
     } else {
       riskLevel = 'very_high';
@@ -438,13 +480,13 @@ export class ScreeningService {
 
     // Generate recommendations
     let recommendations = '';
-    if (score >= 80 && fraudFlags.length === 0) {
+    if (normalizedScore >= 80 && fraudFlags.length === 0) {
       recommendations = '🟢 APROBADO - Inquilino de perfil excelente. Se recomienda proceder con el alquiler.';
-    } else if (score >= 80 && fraudFlags.length > 0) {
+    } else if (normalizedScore >= 80 && fraudFlags.length > 0) {
       recommendations = '🟡 APROBADO CON RESERVAS - Buen perfil pero con observaciones. Revisar manualmente las alertas de fraude antes de proceder.';
-    } else if (score >= 60) {
+    } else if (normalizedScore >= 60) {
       recommendations = '🟡 APROBADO CON RESERVAS - Perfil aceptable. Considere solicitar garantías adicionales (aval o fianza mayor).';
-    } else if (score >= 40) {
+    } else if (normalizedScore >= 40) {
       recommendations = '🔴 NO RECOMENDADO - El perfil presenta riesgos significativos. Se recomienda solicitar avalista solvente o rechazar la solicitud.';
     } else {
       recommendations = '🔴 RECHAZADO - Perfil de alto riesgo. No se recomienda proceder con el alquiler.';
@@ -452,7 +494,7 @@ export class ScreeningService {
 
     // NEW: Generate improvement suggestions (GDPR Article 22)
     const improvementSuggestions: string[] = [];
-    if (score < 80) {
+    if (normalizedScore < 80) {
       if (!incomeVerified || (screening.monthlyIncome && screening.monthlyRent && screening.monthlyIncome / screening.monthlyRent < 3)) {
         improvementSuggestions.push('Aumentar ingresos acreditables o buscar una propiedad con alquiler más bajo');
       }
@@ -484,7 +526,7 @@ export class ScreeningService {
 
     return {
       screeningId: screening.id || '',
-      score,
+      score: normalizedScore,
       approved,
       identityVerified,
       incomeVerified,
@@ -513,6 +555,309 @@ export class ScreeningService {
         consentedAt: new Date().toISOString(),
       },
     };
+  }
+
+  /**
+   * Compare OCR extracted fields with submitted form data and apply risk penalties.
+   */
+  private static applyOcrCrossValidation(
+    screening: Partial<TenantScreening>,
+    ocrContext?: OcrCrossValidationContext
+  ): OcrCrossValidationResult {
+    if (!ocrContext || typeof ocrContext !== 'object') {
+      return { scoreDelta: 0, notes: [], fraudFlags: [], negativeFactors: [] };
+    }
+
+    const result: OcrCrossValidationResult = {
+      scoreDelta: 0,
+      notes: [],
+      fraudFlags: [],
+      negativeFactors: [],
+    };
+
+    // 1) Identity consistency checks
+    if (ocrContext.identity) {
+      const extractedDocumentNumber = this.normalizeDocumentNumber(ocrContext.identity.documentNumber);
+      const declaredDocumentNumber = this.normalizeDocumentNumber(screening.documentNumber);
+      if (extractedDocumentNumber && declaredDocumentNumber && extractedDocumentNumber !== declaredDocumentNumber) {
+        result.scoreDelta -= 25;
+        result.identityVerified = false;
+        result.notes.push('⚠ OCR/Declarado: el nÃºmero de documento no coincide.');
+        result.fraudFlags.push({
+          type: 'document_mismatch',
+          severity: 'high',
+          description: 'NÃºmero de documento de OCR distinto al declarado'
+        });
+        result.negativeFactors.push({
+          factor: 'ValidaciÃ³n por OCR',
+          points: -25,
+          description: 'Conflicto entre documento declarado e imagen analizada'
+        });
+      }
+
+      const extractedFullName =
+        this.getOcrTextValue(ocrContext.identity.fullName) ||
+        this.getOcrTextValue(
+          [ocrContext.identity.name, ocrContext.identity.surname]
+            .filter(Boolean)
+            .join(' ')
+        );
+
+      if (extractedFullName && screening.tenantName &&
+          !this.textsMatch(extractedFullName, screening.tenantName, 0.7)) {
+        result.scoreDelta -= 12;
+        result.notes.push('⚠ OCR/Declarado: el nombre del titular no coincide.');
+        result.fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'medium',
+          description: 'El nombre detectado por OCR de identidad no coincide con el declarado'
+        });
+        result.negativeFactors.push({
+          factor: 'Coherencia de identidad',
+          points: -12,
+          description: 'Nombre del titular distinto al documento OCR'
+        });
+      }
+    }
+
+    // 2) Payslip consistency checks
+    if (ocrContext.payslip) {
+      const declaredIncome = screening.monthlyIncome;
+      const ocrNetIncome = this.toNumeric(ocrContext.payslip.netIncome);
+
+      if (declaredIncome && ocrNetIncome) {
+        const incomePenalty = this.getMonetaryMismatchPenalty(declaredIncome, ocrNetIncome);
+        if (incomePenalty < 0) {
+          const diffPercent = ((Math.abs(declaredIncome - ocrNetIncome) / Math.max(declaredIncome, ocrNetIncome)) * 100);
+          result.scoreDelta += incomePenalty;
+          result.notes.push(`⚠ OCR/Declarado: la nÃ³mina neta (${ocrNetIncome} EUR) no coincide con el ingreso (${declaredIncome} EUR).`);
+          result.fraudFlags.push({
+            type: 'income_anomaly',
+            severity: diffPercent > 35 ? 'high' : 'medium',
+            description: `Diferencia de ${Math.round(diffPercent)}% entre renta declarada y nÃ³mina OCR`
+          });
+          result.negativeFactors.push({
+            factor: 'Consistencia salarial',
+            points: incomePenalty,
+            description: 'Ingreso declarado distinto a nÃ³mina analizada por OCR'
+          });
+        }
+      }
+
+      const extractedEmployer = this.getOcrTextValue(ocrContext.payslip.employerName);
+      if (extractedEmployer && screening.employerName &&
+          !this.textsMatch(extractedEmployer, screening.employerName, 0.6)) {
+        result.scoreDelta -= 8;
+        result.notes.push('⚠ OCR/Declarado: el empleador de nÃ³mina no coincide con el declarado.');
+        result.fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'medium',
+          description: 'Empleador de nÃ³mina extraÃ­do por OCR distinto al declarado'
+        });
+        result.negativeFactors.push({
+          factor: 'Consistencia de empleador',
+          points: -8,
+          description: 'Empleador de nÃ³mina distinto al empleador declarado'
+        });
+      }
+    }
+
+    // 3) Contract consistency checks
+    if (ocrContext.contract) {
+      const extractedAddress = this.getOcrTextValue(ocrContext.contract.propertyAddress);
+      const declaredPreviousAddress = this.getOcrTextValue(screening.previousAddress);
+      if (extractedAddress && declaredPreviousAddress &&
+          !this.textsMatch(extractedAddress, declaredPreviousAddress, 0.5)) {
+        result.scoreDelta -= 10;
+        result.notes.push('⚠ OCR/Declarado: la direcciÃ³n del contrato no coincide con el historial declarado.');
+        result.fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'low',
+          description: 'DirecciÃ³n del contrato en OCR distinta a la registrada como anterior'
+        });
+        result.negativeFactors.push({
+          factor: 'Consistencia de historial',
+          points: -10,
+          description: 'DirecciÃ³n del contrato y del historial no coinciden'
+        });
+      }
+
+      const extractedLandlord = this.getOcrTextValue(ocrContext.contract.landlordName);
+      const declaredPreviousLandlord = this.getOcrTextValue(screening.previousLandlordName);
+      if (extractedLandlord && declaredPreviousLandlord &&
+          !this.textsMatch(extractedLandlord, declaredPreviousLandlord, 0.6)) {
+        result.scoreDelta -= 8;
+        result.notes.push('⚠ OCR/Declarado: el arrendador del contrato no coincide con el historial declarado.');
+        result.fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'low',
+          description: 'Arrendador de contrato OCR distinto al declarado'
+        });
+        result.negativeFactors.push({
+          factor: 'Consistencia de arrendador',
+          points: -8,
+          description: 'Arrendador anterior inconsistente con datos extraÃ­dos por OCR'
+        });
+      }
+
+      const extractedTenant = this.getOcrTextValue(ocrContext.contract.tenantName);
+      if (extractedTenant && screening.tenantName &&
+          !this.textsMatch(extractedTenant, screening.tenantName, 0.7)) {
+        result.scoreDelta -= 8;
+        result.notes.push('⚠ OCR/Declarado: el inquilino del contrato no coincide con el declarado.');
+        result.fraudFlags.push({
+          type: 'data_inconsistency',
+          severity: 'medium',
+          description: 'Arrendatario de contrato OCR distinto al inquilino declarado'
+        });
+        result.negativeFactors.push({
+          factor: 'Consistencia del arrendatario',
+          points: -8,
+          description: 'Nombre de arrendatario en contrato incoherente con lo declarado'
+        });
+      }
+
+      const declaredRent = screening.monthlyRent;
+      const ocrContractRent = this.toNumeric(ocrContext.contract.monthlyRent);
+      const comparableContractAddress = [
+        declaredPreviousAddress,
+        this.getOcrTextValue(screening.propertyAddress)
+      ].filter((value): value is string => !!value);
+
+      const hasComparableAddress = extractedAddress && comparableContractAddress.length > 0
+        ? comparableContractAddress.some((address) => this.textsMatch(extractedAddress, address, 0.5))
+        : false;
+
+      if (declaredRent && ocrContractRent && hasComparableAddress) {
+        const contractRentPenalty = this.getMonetaryMismatchPenalty(declaredRent, ocrContractRent, 0.45, 400);
+        if (contractRentPenalty < 0) {
+          const diffPercent = ((Math.abs(declaredRent - ocrContractRent) / Math.max(declaredRent, ocrContractRent)) * 100);
+          result.scoreDelta += contractRentPenalty;
+          result.notes.push(`⚠ OCR/Declarado: la renta del contrato (${ocrContractRent} EUR) no coincide con la renta declarada (${declaredRent} EUR).`);
+          result.fraudFlags.push({
+            type: 'data_inconsistency',
+            severity: diffPercent > 60 ? 'high' : 'medium',
+            description: 'Renta de contrato OCR distinta a la renta declarada'
+          });
+          result.negativeFactors.push({
+            factor: 'Consistencia de renta',
+            points: contractRentPenalty,
+            description: 'Renta de contrato e importe declarado difieren significativamente'
+          });
+        }
+      }
+    }
+
+    return result;
+  }
+
+  private static normalizeDocumentNumber(value?: string): string | null {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+
+    return value.replace(/\s+/g, '').toUpperCase();
+  }
+
+  private static getOcrTextValue(value?: unknown): string | null {
+    if (!value || typeof value !== 'string') {
+      return null;
+    }
+
+    const cleaned = value.trim();
+    return cleaned.length > 0 ? cleaned : null;
+  }
+
+  private static toNumeric(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value !== 'string') {
+      return null;
+    }
+
+    const cleanedText = value
+      .replace(/[^0-9.,-]/g, '')
+      .replace(/\s/g, '');
+    if (!cleanedText) {
+      return null;
+    }
+
+    if (cleanedText.includes(',') && cleanedText.includes('.')) {
+      const lastDot = cleanedText.lastIndexOf('.');
+      const lastComma = cleanedText.lastIndexOf(',');
+      const normalized = lastDot > lastComma
+        ? cleanedText.replace(/,/g, '')
+        : cleanedText.replace(/\./g, '').replace(/,/g, '.');
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    const normalized = cleanedText.includes(',')
+      ? cleanedText.replace(/,/g, '.')
+      : cleanedText;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private static getMonetaryMismatchPenalty(declared: number, extracted: number, relativeThreshold = 0.35, absoluteThreshold = 1000): number {
+    const diff = Math.abs(declared - extracted);
+    if (diff === 0) {
+      return 0;
+    }
+
+    const diffRatio = diff / Math.max(Math.abs(declared), Math.abs(extracted), 1);
+    if (diffRatio >= relativeThreshold || diff >= absoluteThreshold) {
+      return -20;
+    }
+    if (diffRatio >= 0.2 || diff >= absoluteThreshold * 0.35) {
+      return -12;
+    }
+    if (diffRatio >= 0.1 || diff >= absoluteThreshold * 0.2) {
+      return -6;
+    }
+
+    return 0;
+  }
+
+  private static toComparableText(value: string): string {
+    return value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private static textsMatch(aRaw: string, bRaw: string, matchRatio = 0.6): boolean {
+    const a = this.toComparableText(aRaw);
+    const b = this.toComparableText(bRaw);
+    if (!a || !b) {
+      return false;
+    }
+    if (a === b) {
+      return true;
+    }
+
+    if (a.includes(b) || b.includes(a)) {
+      return true;
+    }
+
+    const aTokens = a.split(' ').filter((token) => token.length >= 2);
+    const bTokens = b.split(' ').filter((token) => token.length >= 2);
+    if (!aTokens.length || !bTokens.length) {
+      return false;
+    }
+
+    const bSet = new Set(bTokens);
+    const sharedCount = aTokens.filter((token) => bSet.has(token)).length;
+    const requiredMatches = Math.max(
+      1,
+      Math.ceil(Math.min(aTokens.length, bTokens.length) * matchRatio)
+    );
+
+    return sharedCount >= requiredMatches;
   }
 
   /**

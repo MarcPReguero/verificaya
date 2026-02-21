@@ -41,14 +41,18 @@ async function verifyEmail() {
 
         if (result.success) {
             console.log('\n✅ Email sent successfully!');
-            console.log('   ID:', result.data?.id);
+            const responseData = result.data as { id?: string } | null;
+            if (responseData?.id) {
+              console.log('   ID:', responseData.id);
+            }
             console.log('   Check your Resend dashboard or inbox.');
         } else {
             console.error('\n❌ Failed to send email:', result.error);
         }
 
-    } catch (error: any) {
-        console.error('\n❌ Unexpected error:', error.message);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unexpected error';
+        console.error('\n❌ Unexpected error:', message);
     }
 }
 

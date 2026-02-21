@@ -7,11 +7,13 @@
 export interface OCRResult {
     success: boolean;
     text: string;
-    data?: any;
+    data?: unknown;
     error?: string;
 }
 
-import { convertPdfToImage } from './pdf-utils';
+type ContentPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+type Message = { role: 'user'; content: ContentPart[] };
+type LLMResponse = { choices?: Array<{ message?: { content?: string } }> };
 
 /**
  * Analyze document image using OpenRouter Vision Models
@@ -130,7 +132,7 @@ CRITICAL INSTRUCTIONS:
 
 REQUIRED FIELDS:
 {
-  "type": "DNI" | "NIE" | "Pasaporte",  // Identify document type based on visual cues.
+  "type": "DNI" | "NIE" | "PASSPORT",  // Identify document type based on visual cues.
   "documentNumber": "12345678A",  // EXACT ID number with letter.
   "name": "First name(s) only",
   "surname": "Surname(s) / Apellidos only",
@@ -158,7 +160,7 @@ Return the JSON now:`;
         const model = 'google/gemini-2.0-flash-exp:free';
         console.log(`[OpenRouter] Using model: ${model}`);
 
-        const messages: any[] = [
+        const messages: Message[] = [
             {
                 role: 'user',
                 content: [
@@ -201,14 +203,15 @@ Return the JSON now:`;
         }
 
         const data = await response.json();
-        const content = data.choices[0]?.message?.content || '';
+        const typedData = data as LLMResponse;
+        const content = typedData.choices?.[0]?.message?.content || '';
 
-        let jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
+        const jsonStr = content.replace(/```json\n?|\n?```/g, '').trim();
         let extractedData = null;
 
         try {
             extractedData = JSON.parse(jsonStr);
-        } catch (e) {
+        } catch {
             console.warn(`[OpenRouter] Failed to parse JSON`);
             throw new Error('Invalid JSON response');
         }
@@ -219,12 +222,13 @@ Return the JSON now:`;
             data: extractedData
         };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
         console.error('[OpenRouter] OCR Error:', error);
+        const message = error instanceof Error ? error.message : 'OCR analysis failed';
         return {
             success: false,
             text: '',
-            error: error.message || 'OCR analysis failed'
+            error: message,
         };
     }
 }

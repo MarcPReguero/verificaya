@@ -24,7 +24,6 @@ const documentTests = [
 ];
 
 let passed = 0;
-let failed = 0;
 
 documentTests.forEach((test, index) => {
   const result = ScreeningService.validateSpanishDocument(test.type, test.number);
@@ -32,8 +31,6 @@ documentTests.forEach((test, index) => {
 
   if (result === test.expected) {
     passed++;
-  } else {
-    failed++;
   }
 
   console.log(`${index + 1}. ${status} - ${test.desc}`);

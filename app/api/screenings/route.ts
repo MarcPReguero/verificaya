@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServiceSupabase } from '@/lib/supabase';
 import { ScreeningService } from '@/lib/services/screening.service';
-import { ReportService } from '@/lib/services/report.service';
-import { AsnefService } from '@/lib/services/asnef.service';
 
 // Check if Supabase is configured
 const isSupabaseConfigured = () => {
@@ -14,13 +12,32 @@ const isSupabaseConfigured = () => {
   );
 };
 
+const normalizeDocumentType = (documentType: unknown) => {
+  const value = typeof documentType === 'string' ? documentType.trim() : '';
+  const upper = value.toUpperCase();
+
+  if (!value) return value;
+  if (upper === 'PASAPORTE' || upper === 'PASSPORT') {
+    return 'PASSPORT';
+  }
+  if (upper === 'DNI' || upper === 'NIE') {
+    return upper;
+  }
+
+  return value;
+};
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const documentType = normalizeDocumentType(body.documentType);
+    const rawOcrContext = body?.ocrContext;
+    const ocrContext =
+      rawOcrContext && typeof rawOcrContext === 'object' ? rawOcrContext : null;
     
     // Debug logging
     console.log('📝 Received screening request:', {
-      documentType: body.documentType,
+      documentType,
       documentNumber: body.documentNumber,
       hasDocumentType: !!body.documentType,
       hasDocumentNumber: !!body.documentNumber
@@ -28,24 +45,24 @@ export async function POST(request: NextRequest) {
 
     // Validate document format
     const isValidDocument = ScreeningService.validateSpanishDocument(
-      body.documentType,
+      documentType,
       body.documentNumber
     );
 
     if (!isValidDocument) {
       console.error('❌ Document validation failed:', {
-        type: body.documentType,
+        type: documentType,
         number: body.documentNumber
       });
       
       return NextResponse.json(
         { 
           error: 'Formato de documento inválido',
-          details: `Tipo: ${body.documentType}, Número: ${body.documentNumber}`,
+          details: `Tipo: ${documentType}, Número: ${body.documentNumber}`,
           expectedFormats: {
             DNI: '12345678A (8 dígitos + letra)',
             NIE: 'X1234567A (X/Y/Z + 7 dígitos + letra)',
-            Pasaporte: 'ABC123456 (3 letras + 6 dígitos)'
+            PASSPORT: 'ABC123456 (3 letras + 6 dígitos)'
           }
         },
         { status: 400 }
@@ -101,7 +118,7 @@ export async function POST(request: NextRequest) {
         tenant_name: body.tenantName,
         tenant_email: body.tenantEmail,
         tenant_phone: body.tenantPhone,
-        document_type: body.documentType,
+        document_type: documentType,
         document_number: body.documentNumber,
         monthly_income: body.monthlyIncome,
         employment_status: body.employmentStatus,
@@ -122,6 +139,7 @@ export async function POST(request: NextRequest) {
         property_address: body.propertyAddress,
         monthly_rent: body.monthlyRent,
         package_type: body.packageType,
+        explanation: ocrContext ? { ocrContext } : null,
         status: 'pending',
       })
       .select()
@@ -135,89 +153,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🆕 ASNEF Credit Check - Automatic integration
-    console.log('🔍 Performing ASNEF credit check...');
-    
-    let creditCheckResult;
-    try {
-      creditCheckResult = await AsnefService.checkCredit({
-        documentType: body.documentType,
-        documentNumber: body.documentNumber,
-        fullName: body.tenantName,
-      });
-      
-      console.log('✅ ASNEF check completed:', {
-        score: creditCheckResult.creditScore,
-        risk: creditCheckResult.riskLevel,
-        hasDebts: creditCheckResult.hasActiveDebts,
-        demoMode: creditCheckResult.demoMode,
-      });
-      
-    } catch (error) {
-      console.error('⚠️ ASNEF check failed, continuing without it:', error);
-      creditCheckResult = undefined;
-    }
-
-    // Calculate score with ASNEF data and new fields
-    const scoringResult = ScreeningService.calculateScore(
-      {
-        id: screening.id,
-        monthlyIncome: body.monthlyIncome,
-        monthlyRent: body.monthlyRent,
-        employmentStatus: body.employmentStatus,
-        documentType: body.documentType,
-        documentNumber: body.documentNumber,
-
-        // NEW: Employment stability
-        employmentYears: body.employmentYears,
-        contractType: body.contractType,
-        employerName: body.employerName,
-
-        // NEW: References
-        references: body.references,
-
-        // NEW: Rental history
-        previousAddress: body.previousAddress,
-        previousLandlordName: body.previousLandlordName,
-        previousLandlordPhone: body.previousLandlordPhone,
-      },
-      creditCheckResult // 🆕 Pass ASNEF result
-    );
-
-    // Update screening with score, credit info, and new algorithm results
-    const { error: updateError } = await supabase
-      .from('screenings')
-      .update({
-        score: scoringResult.score,
-        status: 'completed',
-        completed_at: new Date().toISOString(),
-
-        // NEW: Advanced scoring results
-        risk_level: scoringResult.riskLevel,
-        fraud_flags: scoringResult.fraudFlags,
-        explanation: scoringResult.explanation,
-
-        // Store ASNEF data for future reference
-        ...(creditCheckResult && {
-          credit_score: creditCheckResult.creditScore,
-          has_debts: creditCheckResult.hasActiveDebts,
-          total_debt: creditCheckResult.totalDebt,
-        }),
-      })
-      .eq('id', screening.id);
-
-    if (updateError) {
-      console.error('Error updating screening with score:', updateError);
-    }
-
     return NextResponse.json({ 
       success: true, 
       screeningId: screening.id,
-      score: scoringResult.score,
-      creditScore: creditCheckResult?.creditScore,
-      message: 'Verificación creada exitosamente',
-      asnefChecked: !!creditCheckResult,
-      demoMode: creditCheckResult?.demoMode,
+      status: 'pending',
+      message: 'Verificación creada exitosamente. Pendiente de pago.',
     });
   } catch (error) {
     console.error('API Error:', error);

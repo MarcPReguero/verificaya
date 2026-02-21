@@ -1,19 +1,50 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/useAuth';
 import DocumentUpload from '@/components/forms/DocumentUpload';
+import { uploadScreeningDocument, type ScreeningDocumentType } from '@/components/forms/FileUpload';
+
+type EmploymentStatus = 'employed' | 'self-employed' | 'student' | 'unemployed';
+type ReferenceType = 'employer' | 'previous_landlord' | 'personal';
+type ContractType = '' | 'indefinido' | 'temporal' | 'autonomo' | 'other';
 
 // Mark this route as dynamic to prevent static generation errors
 export const dynamic = 'force-dynamic';
 
 function NewScreeningContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState(1);
+  type PendingDocumentFiles = {
+    identity?: File;
+    payslip?: File;
+    contract?: File;
+  };
+  type PendingOcrContext = {
+    identity?: {
+      type?: 'DNI' | 'NIE' | 'PASSPORT' | 'Unknown' | 'PASAPORTE';
+      documentNumber?: string;
+      fullName?: string;
+      name?: string;
+      surname?: string;
+    };
+    payslip?: {
+      netIncome?: number;
+      grossIncome?: number;
+      employerName?: string;
+      employeeName?: string;
+    };
+    contract?: {
+      landlordName?: string;
+      tenantName?: string;
+      propertyAddress?: string;
+      monthlyRent?: number;
+      startDate?: string;
+      duration?: string;
+    };
+  };
+
+  const [pendingDocuments, setPendingDocuments] = useState<PendingDocumentFiles>({});
+  const [ocrContext, setOcrContext] = useState<PendingOcrContext>({});
   const [formData, setFormData] = useState({
     // Tenant info
     tenantName: '',
@@ -24,7 +55,7 @@ function NewScreeningContent() {
 
     // Employment
     monthlyIncome: '',
-    employmentStatus: 'employed' as const,
+    employmentStatus: 'employed' as EmploymentStatus,
     employmentYears: '',
     contractType: '' as '' | 'indefinido' | 'temporal' | 'autonomo' | 'other',
     employerName: '',
@@ -62,12 +93,66 @@ function NewScreeningContent() {
   const [error, setError] = useState('');
   const [useLocalOCR, setUseLocalOCR] = useState(false);
 
+  const normalizeDocumentType = (documentType: string) => {
+    const upper = documentType.trim().toUpperCase();
+    if (upper === 'PASAPORTE' || upper === 'PASSPORT') {
+      return 'PASSPORT';
+    }
+    if (upper === 'DNI' || upper === 'NIE') {
+      return upper;
+    }
+    return documentType;
+  };
+
+  const toDbDocumentType = (sourceType: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT'): ScreeningDocumentType => {
+    if (sourceType === 'IDENTITY') return 'id-document';
+    if (sourceType === 'PAYSLIP') return 'payslip';
+    return 'employment-contract';
+  };
+
+  const uploadPendingDocuments = async (screeningId: string) => {
+    const documentEntries: Array<{
+      file: File | undefined;
+      sourceType: 'IDENTITY' | 'PAYSLIP' | 'CONTRACT';
+      label: string;
+    }> = [
+      { file: pendingDocuments.identity, sourceType: 'IDENTITY', label: 'Documento de identidad' },
+      { file: pendingDocuments.payslip, sourceType: 'PAYSLIP', label: 'Nómina' },
+      { file: pendingDocuments.contract, sourceType: 'CONTRACT', label: 'Contrato' },
+    ];
+
+    const uploadErrors: string[] = [];
+
+    for (const { file, sourceType, label } of documentEntries) {
+      if (!file) continue;
+
+      try {
+        await uploadScreeningDocument({
+          screeningId,
+          documentType: toDbDocumentType(sourceType),
+          file,
+        });
+      } catch (uploadError) {
+        uploadErrors.push(
+          `${label}: ${(uploadError as Error).message || 'No se pudo subir el archivo'}`
+        );
+      }
+    }
+
+    return uploadErrors;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
 
     try {
+      const preparedOcrContext = {
+        identity: ocrContext.identity,
+        payslip: ocrContext.payslip,
+        contract: ocrContext.contract,
+      };
       // 1. Create screening
       const response = await fetch('/api/screenings', {
         method: 'POST',
@@ -82,6 +167,7 @@ function NewScreeningContent() {
             ...ref,
             verified: false
           })),
+          ocrContext: preparedOcrContext,
         }),
       });
 
@@ -91,13 +177,25 @@ function NewScreeningContent() {
         throw new Error(data.error || 'Error al crear verificación');
       }
 
-      // 2. Create Stripe checkout session
+      // 2. Upload documents with selected files (best effort)
+      const uploadWarnings = await uploadPendingDocuments(data.screeningId);
+      if (uploadWarnings.length > 0) {
+        setError((prev) =>
+          prev
+            ? `${prev} ${uploadWarnings.join(' | ')}`
+            : `Advertencia: no se pudieron subir algunos documentos (${uploadWarnings.join(' | ')})`
+        );
+      }
+
+      // 3. Create Stripe checkout session
       const checkoutResponse = await fetch('/api/create-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           screeningId: data.screeningId,
           packageType: formData.packageType,
+          billingMode: formData.billingMode,
+          subscriptionPlan: formData.subscriptionPlan,
           landlordEmail: formData.landlordEmail,
         }),
       });
@@ -112,8 +210,8 @@ function NewScreeningContent() {
       if (checkoutData.url) {
         window.location.href = checkoutData.url;
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error al crear verificación');
       setSubmitting(false);
     }
   };
@@ -186,12 +284,32 @@ function NewScreeningContent() {
                 <DocumentUpload
                   documentType="IDENTITY"
                   useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    identity: file,
+                  }))}
                   onDataExtracted={(data) => {
+                    const identityType = data.type === 'PASSPORT' || data.type === 'Pasaporte'
+                      ? 'PASSPORT'
+                      : data.type === 'DNI' || data.type === 'NIE'
+                        ? data.type
+                        : undefined;
+
                     setFormData(prev => ({
                       ...prev,
-                      documentType: data.type === 'Unknown' ? 'DNI' : data.type,
+                      documentType: data.type === 'Unknown' ? 'DNI' : normalizeDocumentType(data.type),
                       documentNumber: data.documentNumber || prev.documentNumber,
                       tenantName: data.fullName || data.name || prev.tenantName,
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      identity: {
+                        type: identityType || prev.identity?.type,
+                        documentNumber: data.documentNumber || prev.identity?.documentNumber,
+                        fullName: data.fullName || prev.identity?.fullName,
+                        name: data.name || prev.identity?.name,
+                        surname: data.surname || prev.identity?.surname,
+                      },
                     }));
                     setError('');
                   }}
@@ -211,12 +329,25 @@ function NewScreeningContent() {
                 <DocumentUpload
                   documentType="PAYSLIP"
                   useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    payslip: file,
+                  }))}
                   onDataExtracted={(data) => {
                     setFormData(prev => ({
                       ...prev,
                       monthlyIncome: data.netIncome ? data.netIncome.toString() : prev.monthlyIncome,
                       employerName: data.employerName || prev.employerName,
                       employmentStatus: 'employed',
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      payslip: {
+                        netIncome: data.netIncome,
+                        grossIncome: data.grossIncome,
+                        employerName: data.employerName || prev.payslip?.employerName,
+                        employeeName: data.employeeName || prev.payslip?.employeeName,
+                      },
                     }));
                     setError('');
                   }}
@@ -236,11 +367,26 @@ function NewScreeningContent() {
                 <DocumentUpload
                   documentType="CONTRACT"
                   useLocalOCR={useLocalOCR}
+                  onFileSelected={(file) => setPendingDocuments((prev) => ({
+                    ...prev,
+                    contract: file,
+                  }))}
                   onDataExtracted={(data) => {
                     setFormData(prev => ({
                       ...prev,
                       previousAddress: data.propertyAddress || prev.previousAddress,
                       previousLandlordName: data.landlordName || prev.previousLandlordName,
+                    }));
+                    setOcrContext((prev) => ({
+                      ...prev,
+                      contract: {
+                        landlordName: data.landlordName || prev.contract?.landlordName,
+                        tenantName: data.tenantName || prev.contract?.tenantName,
+                        propertyAddress: data.propertyAddress || prev.contract?.propertyAddress,
+                        monthlyRent: data.monthlyRent,
+                        startDate: data.startDate || prev.contract?.startDate,
+                        duration: data.duration || prev.contract?.duration,
+                      },
                     }));
                     setError('');
                   }}
@@ -319,7 +465,7 @@ function NewScreeningContent() {
                   >
                     <option value="DNI">DNI</option>
                     <option value="NIE">NIE</option>
-                    <option value="Pasaporte">Pasaporte</option>
+                    <option value="PASSPORT">PASSPORT</option>
                   </select>
                 </div>
                 <div>
@@ -372,7 +518,7 @@ function NewScreeningContent() {
                 <select
                   required
                   value={formData.employmentStatus}
-                  onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value as any })}
+                  onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value as EmploymentStatus })}
                   className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
                 >
                   <option value="employed">Empleado por cuenta ajena</option>
@@ -408,7 +554,7 @@ function NewScreeningContent() {
                       <select
                         required
                         value={formData.contractType}
-                        onChange={(e) => setFormData({ ...formData, contractType: e.target.value as any })}
+                        onChange={(e) => setFormData({ ...formData, contractType: e.target.value as ContractType })}
                         className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-gray-900 bg-white"
                       >
                         <option value="">Selecciona...</option>
@@ -543,7 +689,7 @@ function NewScreeningContent() {
                           value={ref.type}
                           onChange={(e) => {
                             const newRefs = [...formData.references];
-                            newRefs[index] = { ...ref, type: e.target.value as any };
+                            newRefs[index] = { ...ref, type: e.target.value as ReferenceType };
                             setFormData({ ...formData, references: newRefs });
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
@@ -767,6 +913,57 @@ function NewScreeningContent() {
                 </div>
               </div>
 
+              {formData.billingMode === 'subscription' && (
+                <div className="mb-6">
+                  <label className="block text-sm font-semibold text-gray-900 mb-3">
+                    Plan de suscripción *
+                  </label>
+                  <div className="grid md:grid-cols-3 gap-3">
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'starter' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'starter'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Starter</span>
+                        {formData.subscriptionPlan === 'starter' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">3 verificaciones/mes</p>
+                    </div>
+
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'professional' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'professional'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Professional</span>
+                        {formData.subscriptionPlan === 'professional' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">10 verificaciones/mes</p>
+                    </div>
+
+                    <div
+                      onClick={() => setFormData({ ...formData, subscriptionPlan: 'enterprise' })}
+                      className={`p-3 rounded-xl border-2 cursor-pointer transition ${formData.subscriptionPlan === 'enterprise'
+                        ? 'border-blue-600 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-gray-900">Enterprise</span>
+                        {formData.subscriptionPlan === 'enterprise' && <span className="text-blue-600">✓</span>}
+                      </div>
+                      <p className="text-xs text-gray-600">30 verificaciones/mes</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-4">
                 <button
                   type="button"
@@ -787,7 +984,7 @@ function NewScreeningContent() {
                       Procesando...
                     </>
                   ) : (
-                    formData.billingMode === 'subscription' ? 'Comenzar Prueba Gratuita' : 'Iniciar Verificación y Pagar'
+                    formData.billingMode === 'subscription' ? 'Suscribirme y Pagar' : 'Iniciar Verificación y Pagar'
                   )}
                 </button>
               </div>
