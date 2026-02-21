@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Return results based on document type
-    let standardizedDocument: StandardizedDocument = {};
+    let standardizedDocument: StandardizedDocument | undefined;
 
     if (documentType === 'PAYSLIP') {
       standardizedDocument = {
@@ -172,6 +172,16 @@ export async function POST(request: NextRequest) {
         nationality: docData.nationality,
         sex: docData.sex,
       };
+    }
+
+    if (!standardizedDocument) {
+      return NextResponse.json(
+        {
+          error: 'Document standardization failed',
+          message: `Unsupported document type: ${documentType}`,
+        },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({
