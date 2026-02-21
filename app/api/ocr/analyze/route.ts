@@ -109,20 +109,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-  const docData = ocrResult.data as Record<string, unknown> | null | undefined;
+    const docData = ocrResult.data as Record<string, unknown> | null | undefined;
   type StandardizedDocument = {
     type: string;
     [key: string]: string | number | boolean | null | undefined;
   };
-  const normalizeIdentityType = (type: string | undefined) => {
-    if (!type) {
+  type StandardizedDocumentValue = string | number | boolean | null | undefined;
+
+  const toStandardizedValue = (value: unknown): StandardizedDocumentValue => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return value;
+    }
+    return String(value);
+  };
+
+  const toNumber = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const normalized = value.replace(',', '.').replace(/[^0-9.-]/g, '');
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+
+  const normalizeIdentityType = (type: unknown) => {
+    const safeType = toStandardizedValue(type);
+
+    if (!safeType || typeof safeType !== 'string') {
       return 'Unknown';
     }
-    const upper = type.toUpperCase();
+    const upper = safeType.toUpperCase();
     if (upper === 'PASAPORTE' || upper === 'PASSPORT') {
       return 'PASSPORT';
     }
-    return type;
+    return safeType;
   };
 
     if (!docData) {
@@ -142,35 +164,37 @@ export async function POST(request: NextRequest) {
     if (documentType === 'PAYSLIP') {
       standardizedDocument = {
         type: 'PAYSLIP',
-        employerName: docData.employerName,
-        employeeName: docData.employeeName,
-        netIncome: docData.netIncome,
-        grossIncome: docData.grossIncome,
-        period: docData.period,
-        seniorityDate: docData.seniorityDate
+        employerName: toStandardizedValue(docData.employerName),
+        employeeName: toStandardizedValue(docData.employeeName),
+        netIncome: toNumber(docData.netIncome),
+        grossIncome: toNumber(docData.grossIncome),
+        period: toStandardizedValue(docData.period),
+        seniorityDate: toStandardizedValue(docData.seniorityDate),
       };
     } else if (documentType === 'CONTRACT') {
       standardizedDocument = {
         type: 'CONTRACT',
-        landlordName: docData.landlordName,
-        tenantName: docData.tenantName,
-        propertyAddress: docData.propertyAddress,
-        monthlyRent: docData.monthlyRent,
-        startDate: docData.startDate,
-        duration: docData.duration
+        landlordName: toStandardizedValue(docData.landlordName),
+        tenantName: toStandardizedValue(docData.tenantName),
+        propertyAddress: toStandardizedValue(docData.propertyAddress),
+        monthlyRent: toNumber(docData.monthlyRent),
+        startDate: toStandardizedValue(docData.startDate),
+        duration: toStandardizedValue(docData.duration),
       };
     } else {
       // IDENTITY
       standardizedDocument = {
         type: normalizeIdentityType(docData.type),
-        documentNumber: docData.documentNumber || '',
-        name: docData.name || '',
-        surname: docData.surname || '',
-        fullName: docData.fullName || `${docData.name || ''} ${docData.surname || ''}`.trim(),
-        birthDate: docData.birthDate,
-        expiryDate: docData.expiryDate,
-        nationality: docData.nationality,
-        sex: docData.sex,
+        documentNumber: toStandardizedValue(docData.documentNumber) || '',
+        name: toStandardizedValue(docData.name) || '',
+        surname: toStandardizedValue(docData.surname) || '',
+        fullName:
+          toStandardizedValue(docData.fullName)
+          || `${toStandardizedValue(docData.name) || ''} ${toStandardizedValue(docData.surname) || ''}`.trim(),
+        birthDate: toStandardizedValue(docData.birthDate),
+        expiryDate: toStandardizedValue(docData.expiryDate),
+        nationality: toStandardizedValue(docData.nationality),
+        sex: toStandardizedValue(docData.sex),
       };
     }
 
