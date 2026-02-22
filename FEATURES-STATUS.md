@@ -1,6 +1,6 @@
 ﻿# Estado de Funcionalidades - TenantScreen
 
-**Fecha:** 21 de Febrero 2026
+**Fecha:** 22 de Febrero 2026
 **Versión:** 0.1.0 (MVP)
 **Estado:** Desarrollo - Casi Produccion
 
@@ -158,3 +158,16 @@
 - `npm run verify-setup`: 32/32 checks passed
 - `npm run lint`: 0 errors, 86 warnings (mainly `any`-typed values and unused variables)
 - No se ejecutaron tests de carga o e2e porque no hay suite de pruebas automatizada dedicada en este repo
+
+## ACTUALIZACION RECIENTE (22 de Febrero 2026)
+
+- Se resolvió el bloqueo por error de TypeScript en `app/api/ocr/analyze/route.ts` (tipado correcto de `standardizedDocument` y normalización de `docData`).
+- Se corrigió el fallo de lint/types al finalizar `npm run build`.
+- Se actualizó `netlify.toml` para `NODE_VERSION=20.19.0`.
+- Se actualizó dependencias de runtime para mitigar bloqueo de seguridad en deploy:
+  - `next`: `15.5.4` -> `15.5.9`
+  - `eslint-config-next`: `15.5.4` -> `15.5.9`
+  - `react`: `19.1.0` -> `19.2.1`
+  - `react-dom`: `19.1.0` -> `19.2.1`
+- Commit con estos cambios: `1f74d0b`.
+- Estado Netlify: el bloqueo por CVE de Next.js quedó corregido en el código/deps; se recomienda redeploy para validar que ya no rechaza subida de función.
