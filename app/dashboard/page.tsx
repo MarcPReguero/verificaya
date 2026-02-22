@@ -589,7 +589,7 @@ export default function Dashboard() {
                         <StatusBadge status={screening.status} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {screening.score !== undefined ? (
+                        {screening.score != null ? (
                           <div className="flex items-center gap-2">
                             <div className={`text-sm font-bold ${
                               screening.score >= 80 ? 'text-green-600' :
