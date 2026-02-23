@@ -1,35 +1,48 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { AsnefService } from '@/lib/services/asnef.service';
+import { authenticateRequest } from '@/lib/server/auth';
+
+const unauthorizedResponse = () =>
+  NextResponse.json(
+    {
+      success: false,
+      error: 'Unauthorized',
+    },
+    { status: 401 }
+  );
+
+const requireAuth = async (request: NextRequest) => {
+  const auth = await authenticateRequest(request);
+  if (!auth || !auth.user.email) {
+    return null;
+  }
+  return auth;
+};
 
 /**
  * POST /api/credit-check
- * 
+ *
  * Consulta historial crediticio en ASNEF
- * 
- * Body:
- * {
- *   documentType: 'DNI' | 'NIE' | 'PASSPORT',
- *   documentNumber: string,
- *   fullName: string,
- *   birthDate?: string
- * }
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request);
+    if (!auth) {
+      return unauthorizedResponse();
+    }
+
     const body = await request.json();
-    
-    // Validación
+
     if (!body.documentNumber || !body.fullName) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Faltan campos requeridos: documentNumber, fullName' 
+        {
+          success: false,
+          error: 'Faltan campos requeridos: documentNumber, fullName',
         },
         { status: 400 }
       );
     }
-    
-    // Validar formato de documento
+
     const documentType =
       typeof body.documentType === 'string' && body.documentType.trim().toUpperCase() === 'PASAPORTE'
         ? 'PASSPORT'
@@ -37,42 +50,40 @@ export async function POST(request: NextRequest) {
           ? body.documentType.trim().toUpperCase()
           : 'DNI';
     const documentNumber = body.documentNumber.trim().toUpperCase();
-    
+
     if (!isValidDocument(documentType, documentNumber)) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Formato de documento inválido' 
+        {
+          success: false,
+          error: 'Formato de documento invalido',
         },
         { status: 400 }
       );
     }
-    
-    // Realizar consulta ASNEF
+
     const creditResult = await AsnefService.checkCredit({
       documentType,
       documentNumber,
       fullName: body.fullName,
       birthDate: body.birthDate,
     });
-    
-    // Log para debugging (remover en producción)
-    console.log('✅ Credit check completed:', {
+
+    console.log('Credit check completed:', {
+      requestedBy: auth.user.id,
       document: documentNumber,
       score: creditResult.creditScore,
       risk: creditResult.riskLevel,
       hasDebts: creditResult.hasActiveDebts,
       demoMode: creditResult.demoMode,
     });
-    
+
     return NextResponse.json(creditResult);
-    
   } catch (error) {
-    console.error('❌ Error in credit check', error);
-    
+    console.error('Error in credit check', error);
+
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Error al realizar consulta crediticia',
         details: 'Error desconocido',
       },
@@ -81,21 +92,16 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * Valida formato de documento español
- */
 function isValidDocument(type: string, number: string): boolean {
   switch (type) {
     case 'DNI':
     case 'NIE':
-      // 8 dígitos + letra o X/Y/Z + 7 dígitos + letra
       return /^[0-9XYZ][0-9]{7}[A-Z]$/i.test(number);
-    
+
     case 'PASAPORTE':
     case 'PASSPORT':
-      // 3 letras + 6 dígitos (español) o formato internacional
       return /^[A-Z]{3}[0-9]{6}$/i.test(number) || number.length >= 6;
-    
+
     default:
       return false;
   }
@@ -103,41 +109,44 @@ function isValidDocument(type: string, number: string): boolean {
 
 /**
  * GET /api/credit-check?document=12345678A
- * 
- * Consulta rápida por documento (para testing)
+ *
+ * Ruta de soporte para testing interno, protegida por autenticacion.
  */
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth) {
+    return unauthorizedResponse();
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const documentNumber = searchParams.get('document');
-  
+
   if (!documentNumber) {
     return NextResponse.json(
-      { 
-        success: false, 
-        error: 'Parámetro requerido: document' 
+      {
+        success: false,
+        error: 'Parametro requerido: document',
       },
       { status: 400 }
     );
   }
-  
+
   try {
     const creditResult = await AsnefService.checkCredit({
       documentType: 'DNI',
       documentNumber: documentNumber.toUpperCase(),
-      fullName: 'Test User',
+      fullName: auth.user.email || 'Authenticated User',
     });
-    
+
     return NextResponse.json(creditResult);
-    
   } catch (error) {
-    console.error('❌ Error in GET credit check', error);
+    console.error('Error in GET credit check', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Error al realizar consulta',
       },
       { status: 500 }
     );
   }
 }
-

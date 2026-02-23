@@ -173,8 +173,14 @@ export async function POST(request: NextRequest) {
     }
 
     const processEndpoint = new URL(`/api/screenings/${screeningId}/process`, request.url);
+    const processToken = process.env.STRIPE_WEBHOOK_SECRET;
     const processResponse = await fetch(processEndpoint.toString(), {
       method: 'POST',
+      headers: processToken
+        ? {
+            'x-internal-process-token': processToken,
+          }
+        : undefined,
     });
 
     if (!processResponse.ok) {

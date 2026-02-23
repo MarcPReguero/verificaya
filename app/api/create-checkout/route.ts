@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getStripeClient, isStripeConfigured, SCREENING_PRICES, SUBSCRIPTION_PRICES } from '@/lib/stripe';
+import { authenticateRequest, createUserSupabaseClient } from '@/lib/server/auth';
+
+const ALLOWED_BILLABLE_STATUSES = new Set(['pending', 'failed']);
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,6 +16,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const auth = await authenticateRequest(request);
+    if (!auth || !auth.user.email) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const supabase = createUserSupabaseClient(auth.accessToken);
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
+    }
+
     const stripe = getStripeClient();
     const body = await request.json();
     const {
@@ -20,7 +33,6 @@ export async function POST(request: NextRequest) {
       packageType = 'complete',
       billingMode = 'payperuse',
       subscriptionPlan = 'professional',
-      landlordEmail,
     } = body;
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://verificaya.es';
@@ -28,21 +40,42 @@ export async function POST(request: NextRequest) {
     const selectedPackageType =
       packageType === 'basic' || packageType === 'complete' ? packageType : 'complete';
     const selectedPlan =
-      subscriptionPlan === 'starter' || subscriptionPlan === 'professional' || subscriptionPlan === 'enterprise'
+      subscriptionPlan === 'starter' ||
+      subscriptionPlan === 'professional' ||
+      subscriptionPlan === 'enterprise'
         ? subscriptionPlan
         : 'professional';
 
     if (!screeningId || typeof screeningId !== 'string' || !screeningId.trim()) {
+      return NextResponse.json({ error: 'Invalid screeningId' }, { status: 400 });
+    }
+    const normalizedScreeningId = screeningId.trim();
+
+    const { data: screening, error: screeningError } = await supabase
+      .from('screenings')
+      .select('id, landlord_email, status')
+      .eq('id', normalizedScreeningId)
+      .eq('landlord_email', auth.user.email)
+      .maybeSingle();
+
+    if (screeningError) {
+      console.error('Error loading screening before checkout:', screeningError);
+      return NextResponse.json({ error: 'Error validating screening ownership' }, { status: 500 });
+    }
+
+    const ownedScreening = screening as { status: string } | null;
+
+    if (!ownedScreening) {
       return NextResponse.json(
-        { error: 'Invalid screeningId' },
-        { status: 400 }
+        { error: 'Screening not found or not owned by authenticated user' },
+        { status: 403 }
       );
     }
 
-    if (!landlordEmail || typeof landlordEmail !== 'string' || !landlordEmail.trim()) {
+    if (!ALLOWED_BILLABLE_STATUSES.has(ownedScreening.status)) {
       return NextResponse.json(
-        { error: 'Invalid landlordEmail' },
-        { status: 400 }
+        { error: `Screening cannot be billed while in status ${ownedScreening.status}` },
+        { status: 409 }
       );
     }
 
@@ -67,10 +100,7 @@ export async function POST(request: NextRequest) {
       const plan = SUBSCRIPTION_PRICES[selectedPlan as keyof typeof SUBSCRIPTION_PRICES];
 
       if (!plan) {
-        return NextResponse.json(
-          { error: 'Invalid subscription plan' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid subscription plan' }, { status: 400 });
       }
 
       lineItem = {
@@ -98,10 +128,7 @@ export async function POST(request: NextRequest) {
       const amount = SCREENING_PRICES[selectedPackageType as keyof typeof SCREENING_PRICES];
 
       if (!amount) {
-        return NextResponse.json(
-          { error: 'Invalid package type' },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: 'Invalid package type' }, { status: 400 });
       }
 
       lineItem = {
@@ -127,11 +154,12 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [lineItem],
       mode,
-      success_url: `${baseUrl}/screening/${screeningId}/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${baseUrl}/screening/${normalizedScreeningId}/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${baseUrl}/screening/new`,
-      customer_email: landlordEmail,
+      customer_email: auth.user.email,
       metadata: {
-        screeningId,
+        screeningId: normalizedScreeningId,
+        landlordId: auth.user.id,
         ...metadata,
       },
     });
