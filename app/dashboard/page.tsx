@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/lib/hooks/useAuth';
-import { supabase } from '@/lib/supabase';
 
 type ScreeningStatus = 'pending' | 'processing' | 'completed' | 'rejected' | 'failed';
 type RiskLevel = 'low' | 'medium' | 'high' | 'very_high';
@@ -167,23 +166,33 @@ export default function Dashboard() {
     }
   }, [isAuthenticated, authLoading, router]);
 
-  // Fetch screenings from Supabase
+  // Fetch screenings through API (includes ownership checks and signed report URLs)
   useEffect(() => {
     async function fetchScreenings() {
-      if (!user?.email) return;
+      if (!isAuthenticated) {
+        setScreenings([]);
+        setFetchingScreenings(false);
+        return;
+      }
 
       try {
         setFetchingScreenings(true);
         setError(null);
 
-        // Fetch screenings for authenticated users
-        const { data, error: fetchError } = await supabase
-          .from('screenings')
-          .select('*')
-          .eq('landlord_email', user.email)
-          .order('created_at', { ascending: false });
+        const response = await fetch('/api/screenings', {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          cache: 'no-store',
+        });
+        const payload = (await response.json()) as
+          | { screenings?: ScreeningDbRow[]; error?: string }
+          | null;
 
-        if (fetchError) throw fetchError;
+        if (!response.ok) {
+          throw new Error(payload?.error || 'Error al cargar verificaciones');
+        }
+
+        const data = Array.isArray(payload?.screenings) ? payload.screenings : [];
 
         // Transform database data to match our component format
         const transformedScreenings = (data || []).map((screening) => {
@@ -217,7 +226,7 @@ export default function Dashboard() {
     }
 
     fetchScreenings();
-  }, [user]);
+  }, [isAuthenticated, user?.id]);
 
   const filteredAndSortedScreenings = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();

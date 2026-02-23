@@ -18,13 +18,20 @@ export async function uploadScreeningDocument(params: {
   file: File;
 }): Promise<string> {
   const { screeningId, documentType, file } = params;
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+
+  if (authError || !authData.user?.id) {
+    throw new Error('Debes iniciar sesion para subir documentos');
+  }
+
+  const ownerId = authData.user.id;
 
   const fileExt = file.name.split('.').pop() || 'bin';
-  const fileName = `${screeningId}/${documentType}-${Date.now()}.${fileExt}`;
+  const objectPath = `${ownerId}/${screeningId}/${documentType}-${Date.now()}.${fileExt}`;
 
   const { data: uploadedData, error: uploadError } = await supabase.storage
     .from('documents')
-    .upload(fileName, file, {
+    .upload(objectPath, file, {
       cacheControl: '3600',
       upsert: false,
     });
@@ -37,23 +44,19 @@ export async function uploadScreeningDocument(params: {
     throw new Error('Upload response did not include path');
   }
 
-  const { data: urlData } = supabase.storage
-    .from('documents')
-    .getPublicUrl(fileName);
-
   const { error: dbError } = await supabase
     .from('screening_documents')
     .insert({
       screening_id: screeningId,
       document_type: documentType,
-      file_url: urlData.publicUrl,
+      file_url: objectPath,
     });
 
   if (dbError) {
     throw dbError;
   }
 
-  return urlData.publicUrl;
+  return objectPath;
 }
 
 export default function FileUpload({ 

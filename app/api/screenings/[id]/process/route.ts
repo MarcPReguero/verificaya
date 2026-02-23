@@ -5,15 +5,29 @@ import { ReportService } from '@/lib/services/report.service';
 import { AsnefService } from '@/lib/services/asnef.service';
 import { TenantScreening } from '@/types';
 import { extractOcrContext } from '@/lib/ocr/extract-ocr-context';
+import { authenticateRequest, createUserSupabaseClient } from '@/lib/server/auth';
+import { createSignedStorageUrl } from '@/lib/storage/signed-urls';
 
-// Check if Supabase is configured
+const INTERNAL_PROCESS_HEADER = 'x-internal-process-token';
+const REPORT_URL_TTL_SECONDS = 60 * 15;
+const EMAIL_REPORT_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
+
 const isSupabaseConfigured = () => {
   return !!(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
     process.env.NEXT_PUBLIC_SUPABASE_URL !== 'your_supabase_url' &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'your_supabase_anon_key' &&
     process.env.SUPABASE_SERVICE_ROLE_KEY &&
     process.env.SUPABASE_SERVICE_ROLE_KEY !== 'your_service_role_key'
   );
+};
+
+const isInternalProcessingRequest = (request: NextRequest) => {
+  const providedToken = request.headers.get(INTERNAL_PROCESS_HEADER);
+  const expectedToken = process.env.STRIPE_WEBHOOK_SECRET;
+
+  return !!(providedToken && expectedToken && providedToken === expectedToken);
 };
 
 export async function POST(
@@ -23,28 +37,47 @@ export async function POST(
   try {
     const { id: screeningId } = await params;
 
-    // Check if Supabase is configured
     if (!isSupabaseConfigured()) {
-      console.warn('⚠️ Supabase not configured - returning mock processing result');
-
-      // Return mock processing result for demo
       return NextResponse.json({
         success: true,
         message: 'Screening procesado exitosamente (MODO DEMO)',
         score: 85,
         demo: true,
-        warning: 'Configure Supabase to process real screenings'
+        warning: 'Configure Supabase to process real screenings',
       });
     }
 
-    const supabase = getServiceSupabase();
+    const internalRequest = isInternalProcessingRequest(request);
 
-    // Get screening data
-    const { data: screening, error } = await supabase
+    let ownerEmail: string | null = null;
+    let supabase = null;
+
+    if (internalRequest) {
+      supabase = getServiceSupabase();
+    } else {
+      const auth = await authenticateRequest(request);
+      if (!auth || !auth.user.email) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+
+      ownerEmail = auth.user.email;
+      supabase = createUserSupabaseClient(auth.accessToken);
+    }
+
+    if (!supabase) {
+      return NextResponse.json({ error: 'Supabase is not configured' }, { status: 503 });
+    }
+
+    let screeningQuery = supabase
       .from('screenings')
       .select('*')
-      .eq('id', screeningId)
-      .single();
+      .eq('id', screeningId);
+
+    if (ownerEmail) {
+      screeningQuery = screeningQuery.eq('landlord_email', ownerEmail);
+    }
+
+    const { data: screening, error } = await screeningQuery.maybeSingle();
 
     if (error || !screening) {
       return NextResponse.json(
@@ -53,12 +86,19 @@ export async function POST(
       );
     }
 
+    const signedExistingReportUrl = await createSignedStorageUrl(
+      supabase,
+      'reports',
+      screening.report_url,
+      REPORT_URL_TTL_SECONDS
+    );
+
     if (screening.status === 'completed') {
       return NextResponse.json({
         success: true,
         message: 'Screening already processed',
         score: screening.score,
-        reportUrl: screening.report_url,
+        reportUrl: signedExistingReportUrl,
       });
     }
 
@@ -70,11 +110,17 @@ export async function POST(
       });
     }
 
-    const { data: claimedScreening, error: claimError } = await supabase
+    let claimQuery = supabase
       .from('screenings')
       .update({ status: 'processing' })
       .in('status', ['pending', 'failed'])
-      .eq('id', screeningId)
+      .eq('id', screeningId);
+
+    if (ownerEmail) {
+      claimQuery = claimQuery.eq('landlord_email', ownerEmail);
+    }
+
+    const { data: claimedScreening, error: claimError } = await claimQuery
       .select('id')
       .maybeSingle();
 
@@ -87,18 +133,23 @@ export async function POST(
     }
 
     if (!claimedScreening) {
-      const { data: currentScreening } = await supabase
+      let currentScreeningQuery = supabase
         .from('screenings')
         .select('status')
-        .eq('id', screeningId)
-        .single();
+        .eq('id', screeningId);
+
+      if (ownerEmail) {
+        currentScreeningQuery = currentScreeningQuery.eq('landlord_email', ownerEmail);
+      }
+
+      const { data: currentScreening } = await currentScreeningQuery.maybeSingle();
 
       if (currentScreening?.status === 'completed') {
         return NextResponse.json({
           success: true,
           message: 'Screening already processed',
           score: screening.score,
-          reportUrl: screening.report_url,
+          reportUrl: signedExistingReportUrl,
         });
       }
 
@@ -117,17 +168,21 @@ export async function POST(
     }
 
     const resetToPending = async () => {
-      const { error: resetError } = await supabase
+      let resetQuery = supabase
         .from('screenings')
         .update({ status: 'pending' })
         .eq('id', screeningId);
 
+      if (ownerEmail) {
+        resetQuery = resetQuery.eq('landlord_email', ownerEmail);
+      }
+
+      const { error: resetError } = await resetQuery;
       if (resetError) {
         console.error('Failed to reset processing status', resetError);
       }
     };
 
-    // Optional credit check
     try {
       const creditCheckResult = await (async () => {
         try {
@@ -136,37 +191,33 @@ export async function POST(
             documentNumber: screening.document_number,
             fullName: screening.tenant_name || '',
           });
-        } catch (error) {
-          console.error('⚠️ ASNEF check failed, continuing without it:', error);
+        } catch (creditError) {
+          console.error('ASNEF check failed, continuing without it:', creditError);
           return undefined;
         }
       })();
 
-      // Calculate score with all new fields
-      const result = ScreeningService.calculateScore({
-        id: screening.id,
-        tenantName: screening.tenant_name,
-        monthlyIncome: screening.monthly_income,
-        monthlyRent: screening.monthly_rent,
-        employmentStatus: screening.employment_status,
-        documentType: screening.document_type,
-        documentNumber: screening.document_number,
+      const result = ScreeningService.calculateScore(
+        {
+          id: screening.id,
+          tenantName: screening.tenant_name,
+          monthlyIncome: screening.monthly_income,
+          monthlyRent: screening.monthly_rent,
+          employmentStatus: screening.employment_status,
+          documentType: screening.document_type,
+          documentNumber: screening.document_number,
+          employmentYears: screening.employment_years,
+          contractType: screening.contract_type,
+          employerName: screening.employer_name,
+          references: screening.references,
+          previousAddress: screening.previous_address,
+          previousLandlordName: screening.previous_landlord_name,
+          previousLandlordPhone: screening.previous_landlord_phone,
+        },
+        creditCheckResult,
+        extractOcrContext(screening.explanation)
+      );
 
-        // NEW: Employment stability fields
-        employmentYears: screening.employment_years,
-        contractType: screening.contract_type,
-        employerName: screening.employer_name,
-
-        // NEW: References
-        references: screening.references,
-
-        // NEW: Rental history
-        previousAddress: screening.previous_address,
-        previousLandlordName: screening.previous_landlord_name,
-        previousLandlordPhone: screening.previous_landlord_phone,
-      }, creditCheckResult, extractOcrContext(screening.explanation));
-
-      // Generate PDF report
       const pdfBlob = await ReportService.generatePDFReport(
         {
           id: screening.id,
@@ -185,10 +236,9 @@ export async function POST(
           createdAt: new Date(screening.created_at),
         } as TenantScreening,
         result,
-        false // Not demo
+        false
       );
 
-      // Upload PDF to Supabase Storage
       const fileName = `screening-${screeningId}-${Date.now()}.pdf`;
       const { error: uploadError } = await supabase.storage
         .from('reports')
@@ -205,22 +255,28 @@ export async function POST(
         );
       }
 
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('reports')
-        .getPublicUrl(fileName);
+      const storedReportPath = fileName;
+      const signedReportUrl = await createSignedStorageUrl(
+        supabase,
+        'reports',
+        storedReportPath,
+        REPORT_URL_TTL_SECONDS
+      );
+      const signedReportUrlForEmail = await createSignedStorageUrl(
+        supabase,
+        'reports',
+        storedReportPath,
+        EMAIL_REPORT_URL_TTL_SECONDS
+      );
 
-      // Update screening with complete results
-      const { error: updateError } = await supabase
+      let updateQuery = supabase
         .from('screenings')
         .update({
           status: 'completed',
           score: result.score,
-          report_url: urlData.publicUrl,
+          report_url: storedReportPath,
           completed_at: new Date().toISOString(),
           ...(creditCheckResult && { credit_checked_at: new Date().toISOString() }),
-
-          // NEW: Save advanced scoring results
           risk_level: result.riskLevel,
           fraud_flags: result.fraudFlags,
           explanation: result.explanation,
@@ -233,6 +289,12 @@ export async function POST(
         })
         .eq('id', screeningId);
 
+      if (ownerEmail) {
+        updateQuery = updateQuery.eq('landlord_email', ownerEmail);
+      }
+
+      const { error: updateError } = await updateQuery;
+
       if (updateError) {
         console.error('Update error:', updateError);
         await resetToPending();
@@ -242,52 +304,49 @@ export async function POST(
         );
       }
 
-      // Get landlord details for email
       const { data: landlordData } = await supabase
         .from('landlords')
         .select('email, name')
         .eq('id', screening.landlord_id)
         .single();
 
-      // Send email notification
       if (landlordData?.email) {
         try {
           const { sendEmail } = await import('@/lib/email');
           const ScreeningCompletedEmail = (await import('@/components/emails/ScreeningCompletedEmail')).default;
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://verificaya.es';
+          const fallbackReportLink = `${appUrl}/dashboard`;
 
           await sendEmail({
             to: landlordData.email,
-            subject: `✅ Verificación completada: ${screening.tenant_name}`,
+            subject: `Verificacion completada: ${screening.tenant_name}`,
             react: ScreeningCompletedEmail({
               landlordName: landlordData.name,
               tenantName: screening.tenant_name,
               score: result.score,
-              reportUrl: urlData.publicUrl,
+              reportUrl: signedReportUrlForEmail || fallbackReportLink,
               documentId: screening.id.substring(0, 8).toUpperCase(),
             }),
           });
-          console.log('📧 Email notification sent to:', landlordData.email);
         } catch (emailError) {
-          console.error('⚠️ Failed to send email notification:', emailError);
-          // Don't fail the request if email fails, just log it
+          console.error('Failed to send email notification:', emailError);
         }
       }
 
       return NextResponse.json({
         success: true,
         result,
-        reportUrl: urlData.publicUrl,
-        emailSent: !!landlordData?.email
+        reportUrl: signedReportUrl,
+        emailSent: !!landlordData?.email,
       });
-    } catch (error) {
+    } catch (processingError) {
       await resetToPending();
-      console.error('Process error:', error);
+      console.error('Process error:', processingError);
       return NextResponse.json(
         { error: 'Error processing screening' },
         { status: 500 }
       );
     }
-
   } catch (error) {
     console.error('Process error:', error);
     return NextResponse.json(
